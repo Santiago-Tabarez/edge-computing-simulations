@@ -1,0 +1,16 @@
+# Global variables of the game
+# the game as it is
+#years: 5
+#max_cores_hosted: 4
+#players_number: 3
+#rt_players: 5
+#price_cpu: 0.05
+#horizon: 24
+#benefit_factor: 1.2
+#chi: 0
+#alpha: 0.5
+#hc: 44000
+#avg_load: 15000
+#heterogeneity_avg_benefit: true
+#heterogeneity_avg_load: false
+

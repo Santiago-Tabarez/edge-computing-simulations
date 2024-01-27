@@ -1,0 +1,37 @@
+# General properties of the game
+max_cores_hosted: [44000]
+price_cpu: [0.5, 0.75]
+years: [3]
+daily_timeslots: [96]
+
+#sigma : 0
+    # random_normal_dist = np.random.normal(avg_load, sigma, daily_timeslots)
+
+
+
+# benefit_factor = beta_i =  benefit factor of player i which represents the benefit that one SP gets from serving one unit of load at the Edge. null for the NO
+# csi = models the shape of the diminishing return, i.e. how fast it saturates to its upper bound beta_i * load_t, if it is 0 then utility function is 0
+service_providers:
+  - player_id : [1]
+    benefit_factor: [7.610350076103502e-06]
+    chi: [0.1, 0.2]
+    avg_load: [15000, 30000]
+    # to be implemented: sensitivity analysis
+      # benefit_factor: [1,2,3,4,5,6,7,8,9]
+      #  chi: [0.1,0.2,0.3,0.4]
+      #  avg_load: [15000, 20000, 3000]
+      # load function
+      #  ak and tk are hyperparameters determining the amplitude and the offset
+      #  of each of the K sinusoidal components. This is used to calculate load functions
+      #a_k = (48530, 25313, -8832, 1757, -2873)
+      #t_k = (0, 47340, 49080, 44520, 44880)
+
+
+  - player_id : [2]
+    benefit_factor: [1.9025875190258755e-06]
+    chi: [0.1]
+    avg_load: [15000, 30000]
+
+  #- benefit_factor: 9.5129375951e-07
+  #  chi: 0.1
+  #  avg_load: 15000
