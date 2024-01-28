@@ -1,7 +1,7 @@
 class Game:
 
-    def __init__(self, years, max_cores_hosted, price_cpu, amount_of_players, daily_timeslots):
-
+    def __init__(self, simulation_id, years, max_cores_hosted, price_cpu, amount_of_players, daily_timeslots):
+        self.simulation_id = simulation_id
         self.years = years
         self.max_cores_hosted = max_cores_hosted
         self.price_cpu = price_cpu

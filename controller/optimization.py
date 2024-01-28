@@ -3,7 +3,6 @@ import math
 from scipy.optimize import minimize
 import numpy as np
 
-
 class Optimization:
 
     def __init__(self):
@@ -17,7 +16,6 @@ class Optimization:
 
 
 opt = Optimization()
-
 # TODO remove from here and add to each player ?
 #  ak and tk are hyperparameters determining the amplitude and the offset
 #  of each of the K sinusoidal components. This is used to calculate load functions
