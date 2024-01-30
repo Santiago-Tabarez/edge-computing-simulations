@@ -3,6 +3,7 @@ import math
 from scipy.optimize import minimize
 import numpy as np
 
+
 class Optimization:
 
     def __init__(self):

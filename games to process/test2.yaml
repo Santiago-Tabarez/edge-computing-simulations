@@ -8,11 +8,11 @@ simulation_id : Sim4 # Only one value accepted
 # All the following properties in this file have 3 different configuration:
 # number assigment, ex: price_cpu: 0.5
 # explicit list of values assigment, ex: price_cpu: [0.5,06]
-# implicit list of values assigment, with the format [Initial_val:Final_val:amount_values], ex, price_cpu: [0.5:1:5]
+# implicit list of values assigment, with the format [Initial_val:Final_val:amount_values], ex, cpu_price: [0.5:1:5]
 
 max_cores_hosted: 44000
-cpu_price: [0.5, 0.75]
-years: [3]
+cpu_price: [0.5:1:5]
+years: [3,4]
 daily_timeslots: [96]
 
 #sigma : 0
