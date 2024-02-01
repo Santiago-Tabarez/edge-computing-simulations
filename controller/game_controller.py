@@ -1,10 +1,4 @@
-import hashlib
 import itertools
-import random
-import string
-
-import mysql.connector
-
 from math import factorial
 
 from scipy.optimize import minimize
@@ -15,14 +9,10 @@ from model.game import Game
 from controller.optimization import maximize_payoff
 from model.network_owner import NetworkOwner
 from model.service_provider import ServiceProvider
+from model.service_provider_sim import ServiceProviderSimulation
+from model.simulation import Simulation
 from utils.yaml_data_reader import YAMLDataReader
 
-mydb = mysql.connector.connect(
-    host="localhost",
-    user="admin",
-    password="admin",
-    database="edge-computing-simulations"
-)
 
 
 # Get a list of games from each of the .yaml files under the games to process folder
@@ -32,6 +22,8 @@ mydb = mysql.connector.connect(
 # amount of games will be the product of the length of those properties
 # For the player_id, it will create len(player:id) players with the same values but different player_id
 
+
+# Aux function to
 def create_value_list(values):
     start, end, total_amount = map(float, values.split(':'))
     total_amount = int(total_amount)
@@ -53,34 +45,58 @@ def parse_value_list(value):
 
 
 def create_game(game_data):
-    games = []
+    # transform the global parameters into a list of values
+    max_cores_hoisted_lis = parse_value_list(game_data['max_cores_hosted'])
+    daily_timeslots_list = parse_value_list(game_data['daily_timeslots'])
+    years_list = parse_value_list(game_data['years'])
+    cpu_price_list = parse_value_list(game_data['cpu_price'])
+
+    amount_of_players = 1
+    sim_players = []
+    #no = NetworkOwner(game_data['simulation_name'])
+    #sim_players.append(no)
+    for sp in game_data['service_providers']:
+
+        load_l = parse_value_list(sp['avg_load'])
+        ben_f_l = parse_value_list(sp['benefit_factor'])
+        chi_l = parse_value_list(sp['chi'])
+
+        # id, service_provider_name, simulation_id, benefit_factor_min, benefit_factor_max, chi_min, chi_max, avg_load_min, avg_load_max
+
+        for sp_id in sp['service_provider_name']:
+            amount_of_players += 1
+            spm = ServiceProviderSimulation(sp_id, min(ben_f_l), max(ben_f_l), min(chi_l), max(chi_l), min(load_l),
+                                            max(load_l))
+            sim_players.append(spm)
+
+    sim = Simulation(game_data['simulation_name'], min(max_cores_hoisted_lis), max(max_cores_hoisted_lis),
+                     min(cpu_price_list), max(cpu_price_list),
+                     min(years_list), max(years_list), min(daily_timeslots_list), max(daily_timeslots_list),
+                     amount_of_players)
+    sim.players = sim_players
+
     for max_cor_h in parse_value_list(game_data['max_cores_hosted']):
         for daily_tl in parse_value_list(game_data['daily_timeslots']):
             for year in parse_value_list(game_data['years']):
                 for price in parse_value_list(game_data['cpu_price']):
-                    # Create combinations of avg_load, benefit_factor and chi for each service provider
-                    # for serv_prov in game_data['service_providers']:
-
-                    # avg_load = parse_value_list(serv_prov['avg_load'])
-                    # benefit_factor = parse_value_list(serv_prov['benefit_factor'])
-                    # chi = parse_value_list(serv_prov['chi'])
 
                     for sp_combinations in itertools.product(
                             *[itertools.product(sp['avg_load'], sp['benefit_factor'], sp['chi'])
                               for sp in game_data['service_providers']]):
 
-                        game = Game(game_data['simulation_id'], years=year, max_cores_hosted=max_cor_h,
+                        game = Game(game_data['simulation_name'], years=year, max_cores_hosted=max_cor_h,
                                     price_cpu=price,
                                     amount_of_players=1,
                                     daily_timeslots=daily_tl)
 
-                        network_owner = NetworkOwner(0)
+                        # Take name from the simulation name
+                        network_owner = NetworkOwner(game_data['simulation_name'])
                         game.add_player(network_owner)
 
                         for sp, (avg_load, benefit_factor, chi) in zip(game_data['service_providers'],
                                                                        sp_combinations):
-                            for player_id in sp['player_id']:
-                                service_provider = ServiceProvider(player_id=player_id, avg_load=avg_load,
+                            for service_provider_name in sp['service_provider_name']:
+                                service_provider = ServiceProvider(player_name=service_provider_name, avg_load=avg_load,
                                                                    benefit_factor=benefit_factor, chi=chi)
                                 game.amount_of_players += 1
                                 game.add_player(service_provider)
@@ -89,9 +105,9 @@ def create_game(game_data):
                             coal = MyCoalition(col, 0)
                             game.coalitions.append(coal)
 
-                        games.append(game)
+                        sim.games.append(game)
 
-    return games
+    return sim
 
 
 # Total coalition revenue is the result of the maximization of the objective function v(S)
@@ -109,6 +125,8 @@ def calculate_coal_payoff(game, coalition):
         gc.coalition_payoff = 365 * game.years * sum(utilities)
         game.gran_coalition = gc
 
+    # print("players", current_coalition.players)
+    # print("utilities", current_coalition.utilities)
     return sol, utilities
 
 
@@ -143,8 +161,8 @@ def shapley_value_payoffs(game):
                 if tuple(set(S.players).symmetric_difference(q.players)) == (player,):
                     # Calculate the marginal contribution of the player
                     contribution = q.coalition_payoff - S.coalition_payoff
-                    player_s_ids = [obj.player_id for obj in S.players]
-                    player_q_ids = [obj.player_id for obj in q.players]
+                    player_s_ids = [obj.player_name for obj in S.players]
+                    player_q_ids = [obj.player_name for obj in q.players]
                     # print("Contribution:", contribution, "Coalition S:", player_s_ids, "Coalition Q:",
                     #      player_q_ids)
                     # Weight the contribution by the number of permutations leading to this coalition formation
@@ -153,10 +171,13 @@ def shapley_value_payoffs(game):
                     summation = summation + tmp
         x_payoffs.append((1 / n_factorial) * summation)
 
+    # print("Shapley value is (fair payoff vector):", game.gran_coalition.shapley_value, "\n")
+    # print("Capacity:", sum(game.gran_coalition.allocation), "\n")
+    # print("Resources split", game.gran_coalition.allocation, "\n")
     return x_payoffs
 
 
-def how_much_rev_paym(game, payoff_vector, w):
+def how_much_revenue_payment(game, payoff_vector, w):
     p_cpu = game.price_cpu
     players_numb = game.amount_of_players
 
@@ -190,99 +211,8 @@ def how_much_rev_paym(game, payoff_vector, w):
 
     game.gran_coalition.revenues = res['x'][0:players_numb]
     game.gran_coalition.payments = res['x'][players_numb:]
+
+    # print("Revenues array:", game.gran_coalition.revenues, "\n")
+    # print("Payments array:", game.gran_coalition.payments, "\n")
     return
 
-
-def save_game(game):
-    my_cursor = mydb.cursor()
-
-    # SQL insert game
-    insert_game = """
-    INSERT INTO games (sim_id, cpu_price, years, daily_timeslots, max_cores_hosted, game_id) 
-    VALUES (%s, %s, %s, %s, %s, %s);
-    """
-
-    simulation_id = game.simulation_id
-
-
-    max_cores_hosted = game.max_cores_hosted
-    price_cpu = game.price_cpu
-    years = game.years
-    daily_timeslots = game.daily_timeslots
-
-    # Concatenate the variables into a single string and convert non-string variables to strings
-    # concatenated_vars = f"{simulation_id}{max_cores_hosted}{price_cpu}{years}{daily_timeslots}"
-
-    # Generate a hash value using SHA-256
-    # hash_object = hashlib.sha256(concatenated_vars.encode())
-    # game_id = hash_object.hexdigest()[:45]
-
-
-    game_id = ''.join(random.choices(string.ascii_letters + string.digits, k=45))
-    # Values to insert
-    values = (simulation_id, game.price_cpu, game.years, game.daily_timeslots,
-              game.max_cores_hosted, game_id)
-
-    # Executing the query
-    try:
-        my_cursor.execute(insert_game, values)
-        mydb.commit()
-    except mysql.connector.Error as err:
-        print("Error occurred: ", err)
-    # finally:
-    # mycursor.close()
-
-    insert_player = """
-       INSERT INTO players (game_id, player_id, avg_load, benefit_factor, chi, allocation, utilities, shapley_value, revenues, payment) 
-       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
-       """
-
-    for i in range(game.amount_of_players):
-        player_id = game.players[i].player_id
-        avg_load = game.players[i].avg_load
-        benefit_factor = game.players[i].benefit_factor
-        chi = game.players[i].chi
-        allocation = game.gran_coalition.allocation[i]
-        utilities = game.gran_coalition.utilities[i]
-        shapley_value = game.gran_coalition.shapley_value[i]
-        revenues = game.gran_coalition.revenues[i]
-        payment = game.gran_coalition.payments[i]
-
-        # Values to insert
-        values = (game_id, player_id, avg_load, benefit_factor, chi,
-                  allocation, utilities, shapley_value, revenues, payment)
-        try:
-            my_cursor.execute(insert_player, values)
-            mydb.commit()
-            print("Query executed successfully")
-        except mysql.connector.Error as err:
-            print("Error occurred: ", err)
-
-        print(player_id, avg_load, benefit_factor, chi)
-
-    """
-    # CREATE TABLE `games` (
-       `sim_id` varchar(45) DEFAULT NULL,
-       `cpu_price` float DEFAULT NULL,
-       `years` float DEFAULT NULL,
-       `daily_timeslots` int DEFAULT NULL,
-       `max_cores_hosted` int DEFAULT NULL,
-       `game_id` varchar(45) DEFAULT NULL
-     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-    
-    CREATE TABLE `players` (
-        `game_id` varchar(45) DEFAULT NULL,
-        `player_id` varchar(45) DEFAULT NULL,
-        `avg_load` float DEFAULT NULL,
-        `benefit_factor` float DEFAULT NULL,
-        `chi` float DEFAULT NULL,
-        `allocation` float DEFAULT NULL,
-        `utilities` float DEFAULT NULL,
-        `shapley_value` float DEFAULT NULL,
-        `revenues` float DEFAULT NULL,
-        `payment` float DEFAULT NULL
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-
-    """
-
-    return None

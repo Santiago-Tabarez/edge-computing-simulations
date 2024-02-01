@@ -3,6 +3,8 @@ import math
 from scipy.optimize import minimize
 import numpy as np
 
+from model.network_owner import NetworkOwner
+
 
 class Optimization:
 
@@ -99,7 +101,9 @@ def _revenues(allocation_vec):
 def _objective(x):
     allocation_vec = x[:-1]
     capacity = x[-1]
+    # TODO review this instead of id use object type
     player_id_zero_exists = any(hasattr(obj, 'player_id') and obj.player_id == 0 for obj in opt.coalition)
+
     # add the condition to not be the only one ? remember to set utility to zero
     if player_id_zero_exists:
         tmp = (-opt.horizon * _revenues(allocation_vec) + opt.p_cpu
