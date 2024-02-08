@@ -1,5 +1,5 @@
 
-class MyCoalition:
+class Coalition:
 
     def __init__(self, players, payoff):
         self.players = players

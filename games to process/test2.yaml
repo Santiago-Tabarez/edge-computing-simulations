@@ -1,48 +1,45 @@
 ### General properties of the game ###
 
-simulation_name : Sim26 # Only one value accepted
-                     # treated as string, the same value for all the games in the current file
-                     # if value already present in database, will override the games with same
-                     # key=(simulation_id,max_cores_hosted, price_cpu, years, daily_timeslots)
 
-# All the following properties in this file have 3 different configuration:
-# number assigment, ex: price_cpu: 0.5
+# Only one value accepted
+# String that identifies the set of games defined in this file
+simulation_name : Sim7
+
+# All the following properties in this file have 3 different possible assigment configuration:
+# immediate number, ex: price_cpu: 0.5
 # explicit list of values assigment, ex: price_cpu: [0.5,06]
 # implicit list of values assigment, with the format [Initial_val:Final_val:amount_values], ex, cpu_price: [0.5:1:5]
 
+# Max amount of cores hosted at the Edge
 max_cores_hosted: 44000
-cpu_price: [0.5:10000:100]
+# price per resource unit dollars/millicores
+cpu_price: [0.05]
+# Investment period, it can take fractions as value
 years: [3]
+# Amount of time slots in a day, used to calculate load and utilit functions
 daily_timeslots: [96]
 
-#sigma : 0
-    # random_normal_dist = np.random.normal(avg_load, sigma, daily_timeslots)
 
-
-
-# benefit_factor = beta_i =  benefit factor of player i which represents the benefit that one SP gets from serving one unit of load at the Edge. null for the NO
-# csi = models the shape of the diminishing return, i.e. how fast it saturates to its upper bound beta_i * load_t, if it is 0 then utility function is 0
 service_providers:
-  - service_provider_name : [SP1,SP2]
-    benefit_factor: [7.610350076103502e-06]
-    chi: [0.1]
-    avg_load: [15000]
-    # to be implemented: sensitivity analysis
-      # benefit_factor: [1,2,3,4,5,6,7,8,9]
-      #  chi: [0.1,0.2,0.3,0.4]
-      #  avg_load: [15000, 20000, 3000]
-      # load function
-      #  ak and tk are hyperparameters determining the amplitude and the offset
-      #  of each of the K sinusoidal components. This is used to calculate load functions
-      #a_k = (48530, 25313, -8832, 1757, -2873)
-      #t_k = (0, 47340, 49080, 44520, 44880)
+  - service_provider_name : [SP1, SP2, SP3]
 
+    #load_function:
+    sigma: [500] # standard deviation for calculating the load, 0 will make the load function deterministic
+    avg_load: [48530] # average load also referred  as a0
+    # hyperparameters: used to define the load function, a_k determining the amplitude (requests) and t_k the offset (time in seconds)
+    a_k:
+      - [ 25313, -8832, 1757, -2873 ]
+      #- [ 9999, -8999, 1997, -2993 ]
+      #- [ 25313, -8832, 1757, -2873 ]
+      #- [ 25313, -8832, 1757, -2873 ]
+    t_k:
+      - [47340, 49080, 44520, 44880 ]
+      #- [9999, 49990, 44990, 49980 ]
+      #- [47340, 49080, 44520, 44880 ]
+      #- [47340, 49080, 44520, 44880 ]
 
-  - service_provider_name : [SP3]
-    benefit_factor: [1.9025875190258755e-06]
-    chi: [0.1]
-    avg_load: [30000]
-
-  #- benefit_factor: 9.5129375951e-07
-  #  chi: 0.1
-  #  avg_load: 15000
+    # utility_function:
+    # benefit factor SPs gets from serving one unit of load
+    benefit_factor: [1.610350076103502e-06]
+    # models the shape of the diminishing return, i.e. how fast it saturates to its upper bound
+    xi: [1]

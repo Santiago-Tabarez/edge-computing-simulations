@@ -10,50 +10,63 @@ class Optimization:
 
     def __init__(self):
         self.utilities = None
-        self.p_cpu = None
+        self.cpu_price = None
         self.daily_timeslots = None
         self.amount_of_players = None
         self.max_cores_hosted = None
         self.horizon = None
         self.coalition = None
+        # this is to calculate individual player payoff
+        self.player = None
 
+
+# This class is used to calculate the value of each coalition
 
 opt = Optimization()
+
+
 # TODO remove from here and add to each player ?
 #  ak and tk are hyperparameters determining the amplitude and the offset
 #  of each of the K sinusoidal components. This is used to calculate load functions
-a_k = (48530, 25313, -8832, 1757, -2873)
-t_k = (0, 47340, 49080, 44520, 44880)
+# a_k = (25313, -8832, 1757, -2873)
+# t_k = (47340, 49080, 44520, 44880)
+# a_0 = 48530
 
 
 # Used to simulate the load changes through the day
-# for each timeslot  it will associate a value
-def _load_series_expansion_player_i(current_timeslot, daily_timeslots):
-    tmp = 0
-    for i in range(len(a_k) - 1):
-        tmp += a_k[i + 1] * math.sin(2 * math.pi * (i + 1) * ((current_timeslot - t_k[i + 1]) / daily_timeslots))
-
-    return a_k[0] + tmp
+# for each timeslot in the day it will associate a value representing the load
+# for that it will use the average load, and the hyperparameters
+def _load_series_expansion_player_i(current_timeslot, daily_timeslots, avg_load, hyper_params):
+    ret = 0
+    k = 1   # index of the {a_k,t_k} list
+    # t_k is in seconds se we need to calculate amount of seconds per time slot
+    secs_tl = 24 * 60 * 60 / daily_timeslots
+    pairs = list(zip(hyper_params[0], hyper_params[1]))
+    # a_k = pair[0]
+    # t_k = pair[1]
+    for pair in pairs:
+        ret += pair[0] * math.sin(
+            2 * math.pi * k * (((current_timeslot * secs_tl) - pair[1]) / (daily_timeslots * secs_tl)))
+        k += 1
+    return avg_load + ret
 
 
 # daily_timeslots = amount of timeslots in a day typically we are working with 96
 # avg_load = average load of the player, that will be used to calculate the load for each timeslot
 # we are using the same average load and load profile for everyday
-def _genera_loads(daily_timeslots, avg_load):
+def _genera_loads(daily_timeslots, avg_load, sigma, hyper_params):
     if avg_load == 0:
         return [0] * daily_timeslots
-
     # random_normal_dist is allways going to be 0, it is necessary to make sigma != so we have some deviation
     # this would change the model into a stochastic one
-    sigma = 0
     # it may make sense to add a significance level to avoid, low probable to big absolute value numbers
     # alpha = 0.05  # significance level
     # z_low, z_high = stats.norm.ppf(alpha / 2), stats.norm.ppf(1 - alpha / 2)
     # TODO avg_load is not being used, mu should be avg_load
-    random_normal_dist = np.random.normal(avg_load, sigma, daily_timeslots)
+    random_normal_dist = np.random.normal(0, sigma, daily_timeslots)
     generated_loads = []
     for timeslot in range(daily_timeslots):
-        load_for_timeslot = _load_series_expansion_player_i(timeslot, daily_timeslots) + random_normal_dist[timeslot]
+        load_for_timeslot = _load_series_expansion_player_i(timeslot, daily_timeslots, avg_load, hyper_params) + random_normal_dist[timeslot]
         generated_loads.append(load_for_timeslot)
     return generated_loads
 
@@ -84,9 +97,37 @@ def _revenues(allocation_vec):
 
     for player in opt.coalition:
         utility = 0
-        loads_i = _genera_loads(opt.daily_timeslots, player.avg_load)
+        if isinstance(player, NetworkOwner):
+            loads_i = [0] * opt.daily_timeslots
+        else:
+            loads_i = player.load_function
+
         for t in range(opt.daily_timeslots):
-            utility += _utility_i(player.benefit_factor, allocation_vec[i], loads_i[t], player.chi)
+            utility += _utility_i(player.benefit_factor, allocation_vec[i], loads_i[t], player.xi)
+
+        opt.utilities.append(utility)
+        i += 1
+
+    total_revenues = sum(opt.utilities)
+    return total_revenues
+
+
+def _revenues_player(allocation_vec):
+    # Handle the empty case, e.g., return early or set default values
+
+    # utility produced by each player for all the timeslots
+    opt.utilities = []
+    i = 0
+
+    for player in opt.coalition:
+        utility = 0
+        if isinstance(player, NetworkOwner):
+            loads_i = [0] * opt.daily_timeslots
+        else:
+            loads_i = player.load_function
+
+        for t in range(opt.daily_timeslots):
+            utility += _utility_i(player.benefit_factor, allocation_vec, loads_i[t], player.xi)
 
         opt.utilities.append(utility)
         i += 1
@@ -101,30 +142,47 @@ def _revenues(allocation_vec):
 def _objective(x):
     allocation_vec = x[:-1]
     capacity = x[-1]
-    # TODO review this instead of id use object type
+    # TODO review this, instead of id use object type
+    #player_id_zero_exists = any(hasattr(obj, 'player_id') and obj.player_id == 0 for obj in opt.coalition)
+    network_operator_in_coal = any(isinstance(player, NetworkOwner) for player in opt.coalition)
+    # add the condition to not be the only one ? remember to set utility to zero
+    if network_operator_in_coal:
+        tmp = (-opt.horizon * _revenues(allocation_vec) + opt.cpu_price
+               * capacity)
+    else:
+        opt.utilities = [0] * len(opt.coalition)
+        tmp = 0
+    return tmp
+
+def _objective_player(x):
+    #allocation_vec = x[:-1]
+    #capacity = x[-1]
+    # TODO review this, instead of id use object type
     player_id_zero_exists = any(hasattr(obj, 'player_id') and obj.player_id == 0 for obj in opt.coalition)
 
     # add the condition to not be the only one ? remember to set utility to zero
     if player_id_zero_exists:
-        tmp = (-opt.horizon * _revenues(allocation_vec) + opt.p_cpu
-               * capacity)
+        tmp = (-opt.horizon * _revenues_player(x) + opt.cpu_price
+               * x)
     else:
         tmp = 0
     return tmp
 
 
-# calculates the difference between the sum of all elements except the last one and the last element itself
+
 def _constraint1(x):
     return sum(x[:-1]) - x[-1]
 
 
-def maximize_payoff(game, coalition_players):
-    opt.p_cpu = game.price_cpu
+# Original function
+def maximize_coalition_payoff(game, coalition_players):
+    opt.cpu_price = game.price_cpu
     opt.amount_of_players = game.amount_of_players
     opt.max_cores_hosted = game.max_cores_hosted
     opt.horizon = game.years * 365
     opt.daily_timeslots = game.daily_timeslots
     opt.coalition = coalition_players
+
 
     x0 = [1] * (opt.amount_of_players + 1)
     b = (0, None)
@@ -135,4 +193,25 @@ def maximize_payoff(game, coalition_players):
     sol = minimize(_objective, x0, method='slsqp', bounds=bounds, constraints=cons)
     if not sol['success']:
         print(sol)
+
+    return sol, opt.utilities
+
+def maximize_player_payoff(game, player):
+    opt.cpu_price = game.price_cpu
+    opt.amount_of_players = game.amount_of_players
+    opt.max_cores_hosted = game.max_cores_hosted
+    opt.horizon = game.years * 365
+    opt.daily_timeslots = game.daily_timeslots
+    opt.player = player
+
+    x0 = np.array(1)
+    b = (0, None)
+    bounds = (b,) * 1 #+ ((0, opt.max_cores_hosted),)
+    con1 = {'type': 'eq', 'fun': _constraint1}
+    cons = [con1]
+
+    sol = minimize(_objective_player, x0, method='slsqp', bounds=bounds, constraints=cons)
+    if not sol['success']:
+        print(sol)
+
     return sol, opt.utilities

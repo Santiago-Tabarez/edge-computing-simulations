@@ -1,4 +1,4 @@
-from model.coalition import MyCoalition
+from model.coalition import Coalition
 
 
 class GrandCoalition:

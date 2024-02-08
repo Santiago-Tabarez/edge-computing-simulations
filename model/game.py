@@ -9,7 +9,7 @@ class Game:
         self.daily_timeslots = daily_timeslots
         self.players = []
         self.coalitions = []
-        self.gran_coalition = None
+        self.grand_coalition = None
 
     def add_player(self, sp):
         self.players.append(sp)
@@ -23,4 +23,4 @@ class Game:
                 f"Amount of Players: {self.amount_of_players}\n"
                 f"Daily Timeslots: {self.daily_timeslots}\n"
                 f"Players:\n{players_str}"
-                f"\n{self.gran_coalition}")
+                f"\n{self.grand_coalition}")
