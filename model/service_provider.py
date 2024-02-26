@@ -14,9 +14,4 @@ class ServiceProvider:
         self.payoff = 0
         self.utility = 0
 
-    def __str__(self):
-        return (f"ServiceProvider:\n"
-                f"Player Id: {self.player_id}\n"
-                f"Avg Load: {self.avg_load}\n"
-                f"Benefit Factor: {self.benefit_factor}\n"
-                f"Chi: {self.chi}\n")
+

@@ -1,217 +1,116 @@
 import math
+from typing import List
 
-from scipy.optimize import minimize
 import numpy as np
+from scipy.optimize import minimize
+import logging.config
 
-from model.network_owner import NetworkOwner
+from model.service_provider import ServiceProvider
 
+logger = logging.getLogger(__name__)
+
+"""
+   This class used to calculate the maximum value of a coalition by optimizing the allocation of resources among service providers to maximize their combined payoff.
+
+   Attributes:
+       cpu_price (float): Price per CPU unit.
+       daily_timeslots (int): Number of timeslots in a daily.
+       amount_of_service_providers (int): Number of service providers involved.
+       max_cores_hosted (int): Maximum number of cores that can be deployed at the Edge.
+       horizon (int): Time in days of the co-investment duration
+       service_providers (List[ServiceProvider]): List of service providers participating in the coalition.
+       
+"""
 
 class Optimization:
+    def __init__(self, cpu_price: float, daily_timeslots: int, amount_of_service_providers: int, max_cores_hosted: int,
+                 horizon: int, service_providers: List[ServiceProvider]):
+        self.utilities: List[float] = []
+        self.cpu_price = cpu_price
+        self.daily_timeslots = daily_timeslots
+        self.amount_of_service_providers = amount_of_service_providers
+        self.max_cores_hosted = max_cores_hosted
+        self.horizon = horizon
+        self.service_providers = service_providers
 
-    def __init__(self):
-        self.utilities = None
-        self.cpu_price = None
-        self.daily_timeslots = None
-        self.amount_of_players = None
-        self.max_cores_hosted = None
-        self.horizon = None
-        self.coalition = None
-        # this is to calculate individual player payoff
-        self.player = None
+        # Vectorized Pre-calculate and store as class variables for better performance
+        # loads_matrix is a 2D array where each row corresponds to a service provider's loads across timeslots
+        self.loads_matrix = np.array([sp.load_function for sp in self.service_providers])
+        self.beta_factors = np.array([sp.benefit_factor for sp in self.service_providers])
+        self.xi_factors = np.array([sp.xi for sp in self.service_providers])
 
+    # Increasing and concave function, characterized by Amdahl's law (a diminishing return effect)
+    # beta_i :  benefit factor of player i which represents the benefit that one SP gets from serving one unit of load at the Edge
+    # xi : models the shape of the diminishing return, i.e. how fast it saturates to its upper bound (beta_i * load_t)
+    # load_t : load in timeslot t for current SP
+    # h_i : allocated resources for current SP
+    @staticmethod
+    def _utility_i(beta_i: float, h_i: float, load_t: float, xi: float) -> float:
+        return beta_i * load_t * (1 - math.exp(-xi * h_i))
 
-# This class is used to calculate the value of each coalition
+    # allocation_vec = array with allocated resources for each of the SPs
+    """
+    def _revenues(self, allocation_vec: List[float]) -> float:
+        # gross utility produced by each service provider for all the timeslots
+        self.utilities = []
 
-opt = Optimization()
+        for i, sp in enumerate(self.service_providers):
+            sp_utility = 0
+            loads_i = sp.load_function
+            for t in range(self.daily_timeslots):
+                sp_utility += self._utility_i(sp.benefit_factor, allocation_vec[i], loads_i[t], sp.xi) * self.horizon
+            self.utilities.append(sp_utility)
 
+        total_revenues = sum(self.utilities)
+        return total_revenues
 
-# TODO remove from here and add to each player ?
-#  ak and tk are hyperparameters determining the amplitude and the offset
-#  of each of the K sinusoidal components. This is used to calculate load functions
-# a_k = (25313, -8832, 1757, -2873)
-# t_k = (47340, 49080, 44520, 44880)
-# a_0 = 48530
+    """
 
+    # Calculates the gross utility produced by each service provider for all the timeslots
+    def _revenues(self, allocation_vec: np.ndarray) -> float:
 
-# Used to simulate the load changes through the day
-# for each timeslot in the day it will associate a value representing the load
-# for that it will use the average load, and the hyperparameters
-def _load_series_expansion_player_i(current_timeslot, daily_timeslots, avg_load, hyper_params):
-    ret = 0
-    k = 1   # index of the {a_k,t_k} list
-    # t_k is in seconds se we need to calculate amount of seconds per time slot
-    secs_tl = 24 * 60 * 60 / daily_timeslots
-    pairs = list(zip(hyper_params[0], hyper_params[1]))
-    # a_k = pair[0]
-    # t_k = pair[1]
-    for pair in pairs:
-        ret += pair[0] * math.sin(
-            2 * math.pi * k * (((current_timeslot * secs_tl) - pair[1]) / (daily_timeslots * secs_tl)))
-        k += 1
-    return avg_load + ret
+        # Calculate utilities for each service provider across all timeslots
+        utility_matrix = self.beta_factors[:, None] * self.loads_matrix * (
+                    1 - np.exp(-self.xi_factors[:, None] * allocation_vec[:, None]))
+        # Total utility for each service provider multiplied by the investment duration
+        total_utilities = np.sum(utility_matrix,
+                                 axis=1) * self.horizon
 
+        # Update 'utilities' with the total utilities for each service provider
+        self.utilities = total_utilities.tolist()
+        total_revenues = np.sum(total_utilities)
 
-# daily_timeslots = amount of timeslots in a day typically we are working with 96
-# avg_load = average load of the player, that will be used to calculate the load for each timeslot
-# we are using the same average load and load profile for everyday
-def _genera_loads(daily_timeslots, avg_load, sigma, hyper_params):
-    if avg_load == 0:
-        return [0] * daily_timeslots
-    # random_normal_dist is allways going to be 0, it is necessary to make sigma != so we have some deviation
-    # this would change the model into a stochastic one
-    # it may make sense to add a significance level to avoid, low probable to big absolute value numbers
-    # alpha = 0.05  # significance level
-    # z_low, z_high = stats.norm.ppf(alpha / 2), stats.norm.ppf(1 - alpha / 2)
-    # TODO avg_load is not being used, mu should be avg_load
-    random_normal_dist = np.random.normal(0, sigma, daily_timeslots)
-    generated_loads = []
-    for timeslot in range(daily_timeslots):
-        load_for_timeslot = _load_series_expansion_player_i(timeslot, daily_timeslots, avg_load, hyper_params) + random_normal_dist[timeslot]
-        generated_loads.append(load_for_timeslot)
-    return generated_loads
+        return total_revenues
 
+    # Used to maximize the payoff of a coalition
+    # Called by minimize from python lib, it will be executed an undetermined amount of times defined by the convergence criterion
+    # x is the allocation vector for service providers and the total capacity
+    def _objective(self, x: List[float]) -> float:
 
-# csi=0.08 in the file csi optimization that I am deleting
+        # Revenues from the allocation vector
+        rev = self._revenues(np.array(x[:-1]))
+        # Calculate net utilities from gross utilities, this is what we want to maximize
+        payoff = rev - self.cpu_price * sum(x[:-1])
+        # We are using minimize function, so we have to change the sign
+        return -1 * payoff
 
-# increasing and concave function, characterized by a diminishing return effect
+    # Ensure the sum of allocations does not exceed the total Edge capacity
+    @staticmethod
+    def _max_allocation_constraint(x: List[float]) -> float:
+        return sum(x[:-1]) - x[-1]
 
-# beta_i =  benefit factor of player i which represents the benefit that one SP gets from serving one unit of load at the Edge. null for the NO
-# csi = models the shape of the diminishing return, i.e. how fast it saturates to its upper bound beta_i * load_t
-# load_t = load in timeslot t for current player
-# h_i = allocated resources for player i, if h_i=0 then utility=0
-def _utility_i(beta_i, h_i, load_t, csi):
-    return beta_i * load_t * (1 - math.exp(-csi * h_i))
+    def maximize_coalition_payoff(self):
 
+        # This is the initial guest for each SP allocation plus the total allocation
+        x0 = np.concatenate([np.ones(self.amount_of_service_providers), [self.amount_of_service_providers]])
+        # Bounds for each service provider
+        b = (0, None)
+        # Total allocation can't be greater than max_cores_hosted
+        bounds = (b,) * self.amount_of_service_providers + ((0, self.max_cores_hosted),)
+        con = {'type': 'eq', 'fun': self._max_allocation_constraint}
 
-# daily_timeslots = amount of timeslots in a day
-# SPs = service providers of the game for which we are calculating revenue
-# betas = array with beta value for each SP, used and explained in _utility_i function
-# h_vec = array with allocated resources for each of the SPs
-# etas = array with average load for each player
-def _revenues(allocation_vec):
-    # Handle the empty case, e.g., return early or set default values
+        sol = minimize(self._objective, x0, method='slsqp', bounds=bounds, constraints=con)
+        if not sol['success']:
+            logger.error("Error in maximize_coalition_payoff %s", sol)
 
-    # utility produced by each player for all the timeslots
-    opt.utilities = []
-    i = 0
-
-    for player in opt.coalition:
-        utility = 0
-        if isinstance(player, NetworkOwner):
-            loads_i = [0] * opt.daily_timeslots
-        else:
-            loads_i = player.load_function
-
-        for t in range(opt.daily_timeslots):
-            utility += _utility_i(player.benefit_factor, allocation_vec[i], loads_i[t], player.xi)
-
-        opt.utilities.append(utility)
-        i += 1
-
-    total_revenues = sum(opt.utilities)
-    return total_revenues
-
-
-def _revenues_player(allocation_vec):
-    # Handle the empty case, e.g., return early or set default values
-
-    # utility produced by each player for all the timeslots
-    opt.utilities = []
-    i = 0
-
-    for player in opt.coalition:
-        utility = 0
-        if isinstance(player, NetworkOwner):
-            loads_i = [0] * opt.daily_timeslots
-        else:
-            loads_i = player.load_function
-
-        for t in range(opt.daily_timeslots):
-            utility += _utility_i(player.benefit_factor, allocation_vec, loads_i[t], player.xi)
-
-        opt.utilities.append(utility)
-        i += 1
-
-    total_revenues = sum(opt.utilities)
-    return total_revenues
-
-
-# used to maximize the payoff of a coalition
-# called by minimize from python lib, it will be executed an undetermined amount of times
-# x has num_of_players + 1 elements, the allocation vector for each player and the total capacity
-def _objective(x):
-    allocation_vec = x[:-1]
-    capacity = x[-1]
-    # TODO review this, instead of id use object type
-    #player_id_zero_exists = any(hasattr(obj, 'player_id') and obj.player_id == 0 for obj in opt.coalition)
-    network_operator_in_coal = any(isinstance(player, NetworkOwner) for player in opt.coalition)
-    # add the condition to not be the only one ? remember to set utility to zero
-    if network_operator_in_coal:
-        tmp = (-opt.horizon * _revenues(allocation_vec) + opt.cpu_price
-               * capacity)
-    else:
-        opt.utilities = [0] * len(opt.coalition)
-        tmp = 0
-    return tmp
-
-def _objective_player(x):
-    #allocation_vec = x[:-1]
-    #capacity = x[-1]
-    # TODO review this, instead of id use object type
-    player_id_zero_exists = any(hasattr(obj, 'player_id') and obj.player_id == 0 for obj in opt.coalition)
-
-    # add the condition to not be the only one ? remember to set utility to zero
-    if player_id_zero_exists:
-        tmp = (-opt.horizon * _revenues_player(x) + opt.cpu_price
-               * x)
-    else:
-        tmp = 0
-    return tmp
-
-
-
-def _constraint1(x):
-    return sum(x[:-1]) - x[-1]
-
-
-# Original function
-def maximize_coalition_payoff(game, coalition_players):
-    opt.cpu_price = game.price_cpu
-    opt.amount_of_players = game.amount_of_players
-    opt.max_cores_hosted = game.max_cores_hosted
-    opt.horizon = game.years * 365
-    opt.daily_timeslots = game.daily_timeslots
-    opt.coalition = coalition_players
-
-
-    x0 = [1] * (opt.amount_of_players + 1)
-    b = (0, None)
-    bounds = (b,) * opt.amount_of_players + ((0, opt.max_cores_hosted),)
-    con1 = {'type': 'eq', 'fun': _constraint1}
-    cons = [con1]
-
-    sol = minimize(_objective, x0, method='slsqp', bounds=bounds, constraints=cons)
-    if not sol['success']:
-        print(sol)
-
-    return sol, opt.utilities
-
-def maximize_player_payoff(game, player):
-    opt.cpu_price = game.price_cpu
-    opt.amount_of_players = game.amount_of_players
-    opt.max_cores_hosted = game.max_cores_hosted
-    opt.horizon = game.years * 365
-    opt.daily_timeslots = game.daily_timeslots
-    opt.player = player
-
-    x0 = np.array(1)
-    b = (0, None)
-    bounds = (b,) * 1 #+ ((0, opt.max_cores_hosted),)
-    con1 = {'type': 'eq', 'fun': _constraint1}
-    cons = [con1]
-
-    sol = minimize(_objective_player, x0, method='slsqp', bounds=bounds, constraints=cons)
-    if not sol['success']:
-        print(sol)
-
-    return sol, opt.utilities
+        return sol, self.utilities

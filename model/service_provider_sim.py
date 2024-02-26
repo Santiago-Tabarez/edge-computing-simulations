@@ -8,10 +8,5 @@ class ServiceProviderSimulation:
         self.xi = xi
         self.hyperparameters = hyperparameters
         self.id = 0
+        self.load_functions = []
 
-    def __str__(self):
-        return (f"ServiceProvider:\n"
-                f"Player Id: {self.player_id}\n"
-                f"Avg Load: {self.avg_load}\n"
-                f"Benefit Factor: {self.benefit_factor}\n"
-                f"Xi: {self.xi}\n")
