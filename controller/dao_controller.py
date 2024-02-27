@@ -142,8 +142,8 @@ def save_simulation(sim):
                        UPDATE service_providers SET 
                             benefit_factor_min = %s,
                             benefit_factor_max = %s,
-                            chi_min = %s,
-                            chi_max = %s,
+                            xi_min = %s,
+                            xi_max = %s,
                             avg_load_min = %s,
                             avg_load_max = %s
                        WHERE service_provider_name = %s AND simulation_id = %s; 
@@ -210,7 +210,7 @@ def save_simulation(sim):
             # save the service providers with min and max values of their load and utility functions
             insert_service_provider = """
             INSERT INTO service_providers ( service_provider_name, simulation_id, benefit_factor_min,
-                benefit_factor_max, chi_min, chi_max, avg_load_min, avg_load_max) 
+                benefit_factor_max, xi_min, xi_max, avg_load_min, avg_load_max) 
             VALUES ( %s, %s, %s, %s, %s, %s, %s, %s);
                                      """
             for player in sim.players:
@@ -269,8 +269,7 @@ def save_game(game, sim):
             update_service_provider_game = """
                             UPDATE service_providers_games
                             SET benefit_factor = %s, 
-                                avg_load = %s, 
-                                chi = %s, 
+                                xi = %s, 
                                 allocation = %s, 
                                 utilities = %s, 
                                 shapley_value = %s, 
@@ -301,14 +300,13 @@ def save_game(game, sim):
                     cursor.execute(update_network_owner_game, values)
                 # Is SP
                 else:
-                    avg_load = game.players[i].avg_load
                     benefit_factor = game.players[i].benefit_factor
                     xi = game.players[i].xi
                     allocation = game.grand_coalition.allocation[i]
                     utilities = game.grand_coalition.utilities[i]
                     load_function_id = game.players[i].load_function_id
                     values = (
-                        benefit_factor, avg_load, xi, allocation, utilities,
+                        benefit_factor, xi, allocation, utilities,
                         shapley_value,
                         revenues, load_function_id, payment, sim.players[i - 1].player_id, game_id,)
                     cursor.execute(update_service_provider_game, values)
@@ -329,8 +327,8 @@ def save_game(game, sim):
             game_id = cursor.lastrowid
 
             insert_service_provider_game = """
-                   INSERT INTO service_providers_games (service_provider_id, game_id, benefit_factor, avg_load, chi, allocation, utilities, shapley_value, revenues, load_function_id, payments) 
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
+                   INSERT INTO service_providers_games (service_provider_id, game_id, benefit_factor, xi, allocation, utilities, shapley_value, revenues, load_function_id, payments) 
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
                    """
             insert_network_owner_game = """
                            INSERT INTO network_owners_games (network_owner_id, game_id, shapley_value, revenues, payments) 
@@ -351,14 +349,13 @@ def save_game(game, sim):
                     cursor.execute(insert_network_owner_game, values)
                 # Is SP
                 else:
-                    avg_load = game.players[i].avg_load
                     benefit_factor = game.players[i].benefit_factor
                     xi = game.players[i].xi
                     allocation = game.grand_coalition.allocation[i]
                     utilities = game.grand_coalition.utilities[i]
                     load_function_id = game.players[i].load_function_id
                     values = (
-                        sim.players[i - 1].player_id, game_id, benefit_factor, avg_load, xi, allocation, utilities,
+                        sim.players[i - 1].player_id, game_id, benefit_factor,  xi, allocation, utilities,
                         shapley_value,
                         revenues, load_function_id, payment)
                     cursor.execute(insert_service_provider_game, values)
@@ -395,9 +392,9 @@ def save_load_function(chart, sp, avg_l, sigma, hyper_params, is_update):
             if sigma != 0:
 
                 update_service_provider_function = """
-                                UPDATE service_providers_load_functions
+                                UPDATE load_function_values
                                 SET load_value = %s
-                                WHERE service_provider_id = %s AND function_id = %s AND time = %s;
+                                WHERE function_id = %s AND time = %s;
                                           """
 
                 for i in chart:
@@ -416,12 +413,12 @@ def save_load_function(chart, sp, avg_l, sigma, hyper_params, is_update):
             function_id = cursor.lastrowid
             # Save load function input values for this game
             insert_service_provider_function = """
-                      INSERT INTO service_providers_load_functions (service_provider_id, function_id, time, load_value) 
-                      VALUES (%s, %s, %s, %s);
+                      INSERT INTO load_function_values (function_id, time, load_value) 
+                      VALUES (%s, %s, %s);
                           """
 
             for i in chart:
-                values = (sp.player_id, function_id, i[0], i[1])
+                values = (function_id, i[0], i[1])
                 cursor.execute(insert_service_provider_function, values)
 
             mydb.commit()

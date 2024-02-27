@@ -65,40 +65,36 @@ CREATE TABLE `service_providers` (
   `simulation_id` int NOT NULL,
   `benefit_factor_min` float NOT NULL,
   `benefit_factor_max` float NOT NULL,
-  `chi_min` float NOT NULL,
-  `chi_max` float NOT NULL,
+  `xi_min` float NOT NULL,
+  `xi_max` float NOT NULL,
   `avg_load_min` float NOT NULL,
   `avg_load_max` float NOT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `id_UNIQUE` (`id`),
   KEY `fk_service_providers_simulations` (`simulation_id`),
-  CONSTRAINT `fk_service_providesrs_simulations` FOREIGN KEY (`simulation_id`) REFERENCES `simulations` (`id`)
+  CONSTRAINT `fk_service_providers_simulations` FOREIGN KEY (`simulation_id`) REFERENCES `simulations` (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `service_providers_games` (
   `service_provider_id` int NOT NULL,
   `game_id` int NOT NULL,
+  `load_function_id` int NOT NULL,
   `benefit_factor` float NOT NULL,
-  `avg_load` float NOT NULL,
-  `chi` float NOT NULL,
+  `xi` float NOT NULL,
   `allocation` float NOT NULL,
   `utilities` float NOT NULL,
   `shapley_value` float NOT NULL,
   `revenues` float NOT NULL,
-  `load_function_id` int NOT NULL,
   `payments` float DEFAULT NULL,
   PRIMARY KEY (`service_provider_id`,`game_id`),
   KEY `fk_service_providers_games_games` (`game_id`),
   KEY `fk_service_providers_games_load_function_idx` (`load_function_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
-CREATE TABLE `service_providers_load_functions` (
-  `service_provider_id` int NOT NULL,
+CREATE TABLE `load_function_values` (
   `function_id` int NOT NULL,
   `time` float NOT NULL,
   `load_value` float NOT NULL,
   KEY `fk_service_provider_load_function_load_function_idx` (`function_id`),
-  KEY `fk_service_providers_load_functions_service_providers_idx` (`service_provider_id`),
-  CONSTRAINT `fk_service_providers_load_functions_load_functions` FOREIGN KEY (`function_id`) REFERENCES `load_functions` (`id`),
-  CONSTRAINT `fk_service_providers_load_functions_service_providers` FOREIGN KEY (`service_provider_id`) REFERENCES `service_providers` (`id`)
+  CONSTRAINT `fk_load_function_values_load_functions` FOREIGN KEY (`function_id`) REFERENCES `load_functions` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
