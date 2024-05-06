@@ -4,7 +4,7 @@ from model.network_owner import NetworkOwner
 class Simulation:
 
     def __init__(self, simulation_name, max_cores_hosted_min, max_cores_hosted_max, cpu_price_min, cpu_price_max,
-                 years_min, years_max, daily_timeslots_min, daily_timeslots_max, amount_of_players):
+                 years_min, years_max, daily_timeslots_min, daily_timeslots_max, amount_of_players, simulation_type,  variable_cpu_price, per_time_slot_allocation):
         self.simulation_id = 0
         self.simulation_name = simulation_name
         self.max_cores_hosted_min = max_cores_hosted_min
@@ -19,5 +19,11 @@ class Simulation:
         self.games = []
         self.players = []
         self.network_owner = NetworkOwner(simulation_name)
-        self.is_update = False
+        # Type of simulation this is string options are: 'additive','deterministic', 'estimation'
+        self.simulation_type = simulation_type
+        # Extra considerations to justify non additive value functions for coalitions value, those are boolean
+        self.variable_cpu_price = variable_cpu_price
+        self.per_time_slot_allocation = per_time_slot_allocation
+
+
 

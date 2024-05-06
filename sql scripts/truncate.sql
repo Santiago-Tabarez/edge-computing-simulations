@@ -1,5 +1,4 @@
 SET FOREIGN_KEY_CHECKS = 0;
-
 TRUNCATE TABLE `network_owners_games`;
 TRUNCATE TABLE `service_providers_games`;
 TRUNCATE TABLE `load_function_values`;
@@ -8,5 +7,9 @@ TRUNCATE TABLE `network_owners`;
 TRUNCATE TABLE `service_providers`;
 TRUNCATE TABLE `load_functions`;
 TRUNCATE TABLE `simulations`;
-
+TRUNCATE TABLE `cheater_service_providers_games`;
+TRUNCATE TABLE `true_load_function_values`;
+TRUNCATE TABLE `true_load_functions`;
+TRUNCATE TABLE `true_utility_function_values`;
+TRUNCATE TABLE `utility_function_values`;
 SET FOREIGN_KEY_CHECKS = 1;

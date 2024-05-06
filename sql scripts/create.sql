@@ -24,19 +24,9 @@ CREATE TABLE `games` (
   `daily_timeslots` int NOT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `id_UNIQUE` (`id`),
-  KEY `fk_sim_id_idx` (`simulation_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='	';
-
-CREATE TABLE `load_functions` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `service_provider_id` int NOT NULL,
-  `sigma` float NOT NULL,
-  `avg_load` float NOT NULL,
-  `hyper_params_a_k` varchar(250) NOT NULL,
-  `hyper_params_t_k` varchar(250) NOT NULL,
-  PRIMARY KEY (`id`),
-  KEY `fk_load_functions_service_providers_idx` (`service_provider_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  KEY `fk_sim_id_idx` (`simulation_id`),
+  CONSTRAINT `fk_games_simulations` FOREIGN KEY (`simulation_id`) REFERENCES `simulations` (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='';
 
 CREATE TABLE `network_owners` (
   `id` int NOT NULL AUTO_INCREMENT,
@@ -44,7 +34,8 @@ CREATE TABLE `network_owners` (
   `simulation_id` int NOT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `id_UNIQUE` (`id`),
-  KEY `fk_network_owners_simulations` (`simulation_id`)
+  KEY `fk_network_owners_simulations` (`simulation_id`),
+  CONSTRAINT `fk_network_owners_simulations` FOREIGN KEY (`simulation_id`) REFERENCES `simulations` (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `network_owners_games` (
@@ -75,6 +66,18 @@ CREATE TABLE `service_providers` (
   CONSTRAINT `fk_service_providers_simulations` FOREIGN KEY (`simulation_id`) REFERENCES `simulations` (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+CREATE TABLE `load_functions` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `service_provider_id` int NOT NULL,
+  `sigma` float NOT NULL,
+  `avg_load` float NOT NULL,
+  `hyper_params_a_k` varchar(250) NOT NULL,
+  `hyper_params_t_k` varchar(250) NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `fk_load_functions_service_providers_idx` (`service_provider_id`),
+  CONSTRAINT `fk_load_functions_service_providers_idx` FOREIGN KEY (`service_provider_id`) REFERENCES `service_providers` (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
 CREATE TABLE `service_providers_games` (
   `service_provider_id` int NOT NULL,
   `game_id` int NOT NULL,
@@ -88,7 +91,10 @@ CREATE TABLE `service_providers_games` (
   `payments` float DEFAULT NULL,
   PRIMARY KEY (`service_provider_id`,`game_id`),
   KEY `fk_service_providers_games_games` (`game_id`),
-  KEY `fk_service_providers_games_load_function_idx` (`load_function_id`)
+  KEY `fk_service_providers_games_load_function_idx` (`load_function_id`),
+  CONSTRAINT `fk_service_providers_games_service_provider_id` FOREIGN KEY (`service_provider_id`) REFERENCES `service_providers` (`id`),
+  CONSTRAINT `fk_service_providers_games_game_id` FOREIGN KEY (`game_id`) REFERENCES `games` (`id`),
+  CONSTRAINT `fk_service_providers_games_load_function_id` FOREIGN KEY (`load_function_id`) REFERENCES `load_functions` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `load_function_values` (
@@ -97,4 +103,52 @@ CREATE TABLE `load_function_values` (
   `load_value` float NOT NULL,
   KEY `fk_service_provider_load_function_load_function_idx` (`function_id`),
   CONSTRAINT `fk_load_function_values_load_functions` FOREIGN KEY (`function_id`) REFERENCES `load_functions` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE `cheater_service_providers_games` (
+  `service_provider_id` int NOT NULL,
+  `game_id` int NOT NULL,
+  `true_load_function_id` int NOT NULL,
+  `true_benefit_factor` float NOT NULL,
+  `true_xi` float NOT NULL,
+  `true_utilities` float NOT NULL,
+  `fake_utilities` float NOT NULL,
+  PRIMARY KEY (`service_provider_id`,`game_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE `true_load_function_values` (
+  `function_id` int NOT NULL,
+  `time` float NOT NULL,
+  `load_value` float NOT NULL,
+  KEY `fk_service_provider_load_function_load_function_idx` (`function_id`),
+  CONSTRAINT `fk_true_load_function_values_load_functions` FOREIGN KEY (`function_id`) REFERENCES `load_functions` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE `true_load_functions` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `service_provider_id` int NOT NULL,
+  `sigma` float NOT NULL,
+  `avg_load` float NOT NULL,
+  `hyper_params_a_k` varchar(250) NOT NULL,
+  `hyper_params_t_k` varchar(250) NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `fk_load_functions_service_providers_idx` (`service_provider_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE `true_utility_function_values` (
+  `player_id` int NOT NULL,
+  `game_id` int NOT NULL,
+  `time` float NOT NULL,
+  `value` float NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE `utility_function_values` (
+  `player_id` int NOT NULL,
+  `game_id` int NOT NULL,
+  `time` float NOT NULL,
+  `value` float NOT NULL,
+  KEY `fk_utility_function_values_service_provider_id_idx` (`player_id`),
+  KEY `fk_utility_funct_values_serv_prov_games_idx` (`game_id`),
+  CONSTRAINT `fk_utility_funct_values_serv_prov` FOREIGN KEY (`player_id`) REFERENCES `service_providers_games` (`service_provider_id`),
+  CONSTRAINT `fk_utility_funct_values_serv_prov_games` FOREIGN KEY (`game_id`) REFERENCES `service_providers_games` (`game_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
