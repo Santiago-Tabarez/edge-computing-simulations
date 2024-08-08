@@ -3,38 +3,36 @@ import plotly.graph_objects as go
 
 # Constants
 avg_load = 48530.0  # Average load
-#xi = 0.08
+xi = 0.08
 cpu_price = 0.5
 horizon = 365 * 3
 daily_time_slots = 96
 time_slots_in_horizon = horizon * daily_time_slots
+
 # Generating beta values
-betas = np.linspace(1e-7, 1e-4, 100)
-y_s = betas * avg_load
+betas = np.linspace(1e-9, 1e-6, 100)
 
 # Precompute optimal allocations and net utilities for each beta
-xis = np.linspace(0.01, 0.5, 100)
-
+optimal_allocations = np.array([np.log(cpu_price / (time_slots_in_horizon * beta * avg_load * xi)) / -xi for beta in betas])
 net_utilities = np.zeros((100, 100))
 
 # Calculate net utilities for each combination of beta and optimal allocation
-for i, y in enumerate(y_s):
-    for j, x in enumerate(xis):
-        optimal_alloc = np.log(cpu_price / (time_slots_in_horizon * y * x)) / -x
-        gross_utility = y * (1 - np.exp(-x * optimal_alloc)) * time_slots_in_horizon
-        allocation_cost = cpu_price * optimal_alloc
+for i, beta in enumerate(betas):
+    for j, op_alloc in enumerate(optimal_allocations):
+        gross_utility = beta * avg_load * (1 - np.exp(-xi * op_alloc)) * time_slots_in_horizon
+        allocation_cost = cpu_price * op_alloc
         net_utilities[i, j] = gross_utility - allocation_cost
 
 # Meshgrid for plotting
-B, O = np.meshgrid(betas, xis)
+B, O = np.meshgrid(betas, optimal_allocations)
 
 # Prepare 3D plot using Plotly
 fig = go.Figure(data=[
     go.Surface(z=net_utilities, x=B, y=O, colorscale='Viridis', name='Net Utility Surface'),
     go.Scatter3d(
         x=betas,
-        y=xis,
-        z=[net_utilities],
+        y=optimal_allocations,
+        z=[beta * avg_load * (1 - np.exp(-xi * op_alloc)) * time_slots_in_horizon - cpu_price * op_alloc for beta, op_alloc in zip(betas, optimal_allocations)],
         mode='lines+markers',
         marker=dict(size=4, color='red'),
         line=dict(color='red', width=4),

@@ -142,14 +142,9 @@ class Optimization:
     # x is the allocation vector for service providers and the total capacity
     def _objective(self, allocation: List[float]) -> float:
 
-        # Revenues from the allocation vector
-
-        # sum(sum(utility_function(h, t, i) for i in range(n)) for t in range(T))
-
         # if config.EXTRA_CONSIDERATIONS['per_time_slot_allocation']:
         if self.per_time_slot_allocation:
             utility_sum = 0
-            # max_alloc = [0, 0]  # Just for logging
 
             for t in range(self.daily_timeslots):
                 # Optimization for a time slot

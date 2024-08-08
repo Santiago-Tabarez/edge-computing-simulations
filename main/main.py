@@ -26,7 +26,7 @@ def main():
     daoC = DAOController()
     daoC.database_config()
 
-    folder_path = '../games to process/'
+    folder_path = '../simulations to process/'
     yaml_games_data = YAMLDataReader.read_yaml_files(folder_path)
 
     # Determine the type of game based on value function

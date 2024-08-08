@@ -37,7 +37,7 @@ class GameBuilderController:
         step = (end - start) / (total_amount - 1)
         return [start + i * step for i in range(int(total_amount))]
 
-    # Used to a set of games from each of the .yaml files under the "games to process" folder
+    # Used to a set of games from each of the .yaml files under the "simulations to process" folder
     # Will create a different game for each possible combination of the following values:
     # game: max_cores_hosted, daily_timeslots, years, price_cpu
     # for each service_provider: avg_load, benefit_factor, sigma, each pair of hyperparameters and xi

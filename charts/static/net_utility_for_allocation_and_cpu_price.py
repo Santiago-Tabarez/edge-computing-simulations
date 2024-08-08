@@ -2,8 +2,9 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
+# Used for Figure 1
 # Constants
-beta_i = 1.5e-07  # Benefit factor
+beta_i = 1.5e-08  # Benefit factor
 avg_load = 48530  # Average load
 xi = 0.08
 cpu_price = 0.5
@@ -20,7 +21,7 @@ gross_utility = beta_i * avg_load * (1 - np.exp(-xis * optimal_allocation)) * ti
 allocation_cost = cpu_price * optimal_allocation
 
 # Range of h^i (allocated resources)
-allocated_resources = np.linspace(0, 3000, 1000)  # Adjust the range as necessary
+allocated_resources = np.linspace(0, 200, 1000)  # Adjust the range as necessary
 
 # Gross utility function
 gross_utility = beta_i * avg_load * (1 - np.exp(-xi * allocated_resources)) * time_slots_in_horizon

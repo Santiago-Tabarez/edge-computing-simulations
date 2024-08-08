@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 
 # This chart corresponds to equation 16
 
-h = 1  # example fixed value for h
+h = 89  # example fixed value for h
 
 # Define xi and y ranges
 xi = np.linspace(0.01, 2, 1000)  # avoid very small values near zero
