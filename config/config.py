@@ -8,7 +8,7 @@ LOGGING_CONFIG = {
     'disable_existing_loggers': False,
     'handlers': {
         'console': {
-            'level': 'ERROR',
+            'level': 'DEBUG',
             'class': 'logging.StreamHandler',
         },
     },
@@ -32,20 +32,21 @@ DATABASE_CONNECTION_CONFIG = {
 DATABASE_MANAGEMENT_CONFIG = {
     'drop': False,
     'truncate': False,
-    'create': True,
+    'create': False
 }
 
 # Save the utility and load for each service provider in the database
 # Any combination is possible
 SAVE_FUNCTION = {
-    'utility': True,
-    'load': True
+    'utility': False,
+    'load': False
 }
 
 # This defines how the model is going to be computed
 # Only one can be True
 VALUE_FUNCTION_MODE = {
-    'additive': True,
+
+    'additive': True, # Individual contribution
     'non_additive_deterministic': False,
     'non_additive_estimation': False
 }
@@ -66,5 +67,5 @@ MONTE_CARLO_VARIABLES = {
 # It shouldn't be used with 'additive': True, but it is possible
 EXTRA_FUNCTIONALITIES = {
     # "'calibrate_params': False,
-    "check_for_cheat": True
+    "check_for_cheat": False
 }

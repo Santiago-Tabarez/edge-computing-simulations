@@ -28,7 +28,7 @@ class Optimization:
 
     def __init__(self, min_cpu_price: float, max_cpu_price: float, min_cores_hosted: int, max_cores_hosted: int,
                  daily_timeslots: int,
-                 horizon: int, service_providers: List[ServiceProvider]):
+                 horizon: int, p_value: int, q_value: int, service_providers: List[ServiceProvider]):
 
         self.utilities: List[float] = []
 
@@ -36,7 +36,8 @@ class Optimization:
         self.max_cpu_price = max_cpu_price
         self.min_cores_hosted = min_cores_hosted
         self.max_cores_hosted = max_cores_hosted
-
+        self.q_value = q_value
+        self.p_value = p_value
         if min_cpu_price == max_cpu_price:
             self.fixed_cpu_price = min_cpu_price
             self.weighted_by_alloc_cpu_price = None
@@ -72,8 +73,10 @@ class Optimization:
             self.allocations = np.asarray(allocations).reshape(self.amount_of_service_providers, self.daily_timeslots)
 
             # Compute utilities for all service providers and timeslots
-            utility_matrix = self.beta_factors[:, np.newaxis] * self.loads_matrix * (
-                    1 - np.exp(-self.xi_factors[:, np.newaxis] * allocations))
+
+            utility_matrix = self.beta_factors[:, np.newaxis] * self.loads_matrix * (1 - np.exp
+            ((-self.xi_factors[:, np.newaxis] * allocations) / (
+                    self.loads_matrix ** (1 - self.p_value) * (self.xi_factors ** self.q_value))))
 
             # Sum utilities across timeslots for each service provider
             utilities_sum_per_sp = utility_matrix.sum(axis=1)
@@ -88,7 +91,9 @@ class Optimization:
         else:
 
             utility_matrix = self.beta_factors[:, None] * self.loads_matrix * (
-                    1 - np.exp(-self.xi_factors[:, None] * allocations[:, None]))
+                    1 - np.exp(
+                (-self.xi_factors[:, None] * allocations[:, None]) / (
+                        self.loads_matrix ** (1 - self.p_value) * (self.xi_factors[:, None] ** self.q_value))))
             # Total utility for each service provider multiplied by the investment duration
             # Flatten the matrix into an array of the sums of utility function throw the timeslots
             total_utilities = np.sum(utility_matrix,
@@ -105,7 +110,10 @@ class Optimization:
         return load
 
     def utility_function(self, h, t, i):
-        util = self.beta_factors[i] * self.load_funct(t, i) * (1 - np.exp(-self.xi_factors[i] * h))
+
+        util = self.beta_factors[i] * self.load_funct(t, i) * (1 - np.exp(
+            (-self.xi_factors[i] * h) / (
+                    self.load_funct(t, i) ** (1 - self.p_value) * (self.xi_factors[i] ** self.q_value))))
         # print("timeslot", t, "player", i, "utility", util, "allocation", h)
         return util
 
@@ -113,10 +121,11 @@ class Optimization:
     def global_allocation_constraint(x: List[float], global_alloc: float) -> float:
         return global_alloc - sum(x)
 
+    # This function returns the negative utility
     def time_slot_utility(self, ts_alloc, ts):
 
         utility_ts_sum = 0
-        # This function now directly returns the negative utility for simplicity
+
         for i in range(self.amount_of_service_providers):
             utility_ts_sum += self.utility_function(ts_alloc[i], ts, i)
 
@@ -134,7 +143,7 @@ class Optimization:
                                                                                                   sum(self.max_alloc))
         # TODO review if it is correct tp divide price equally
         cost = cost / self.daily_timeslots
-        # cost = (sum(self.max_alloc) * self.fixed_cpu_price) / 96
+        cost = (sum(self.max_alloc) * self.fixed_cpu_price) / 96
         return - 1 * (utility_ts_sum * self.horizon - cost)
 
     # Used to maximize the payoff of a coalition
@@ -150,11 +159,16 @@ class Optimization:
                 # Optimization for a time slot
                 bounds_ts = [(0, None)]
                 ts_alloc = np.asarray(allocation)
-                # TODO with ineq we should get slightly bigger allocation but we can somehow positively account not using 100% of CPU
                 constraint = ({'type': 'eq', 'fun': lambda x: self.global_allocation_constraint(x, sum(allocation))})
                 result_ts = minimize(self.time_slot_utility, ts_alloc, args=(t,), bounds=bounds_ts,
                                      constraints=constraint,
-                                     method='SLSQP')
+                                     method='SLSQP',
+                                     options={'ftol': 1e-12,
+                                              # Stop criteria, process is stopped when |f_n - f_{n-1}| < ftol, default ~ 1e-6
+                                              'eps': 1.5e-9,
+                                              # Step size used for numerical approximation of the Jacobian, default ~ 1.5e-5
+                                              'maxiter': 10000,  # Max amount of iteration
+                                              'disp': False})
 
                 if not result_ts.success:
                     print(
@@ -224,33 +238,39 @@ class Optimization:
     def maximize_coalition_payoff(self):
 
         if config.EXTRA_CONSIDERATIONS['per_time_slot_allocation']:
-
+            # We ignore the per time-slot allocation to get the initial allocations guess
+            # This is just to converge faster
             self.per_time_slot_allocation = False
             max_alloc_const = {'type': 'eq', 'fun': self._max_allocation_constraint}
             b = (0, None)
             initial_allocations = np.concatenate(
                 [np.ones(self.amount_of_service_providers), [self.amount_of_service_providers]])
 
+
+
             # Bounds for each service provider
             bounds = (b,) * self.amount_of_service_providers + ((0, self.max_cores_hosted),)
             sol = minimize(self._objective, initial_allocations, method='slsqp', bounds=bounds,
                            constraints=max_alloc_const,
                            options={'ftol': 1e-6, 'eps': 1.5e-6, 'maxiter': 1000, 'disp': False})
-            initial_allocations = sol.x[:-1]
 
+            initial_allocations = np.asarray(sol.x[:-1])
+            #self.max_alloc = initial_allocations
+
+            # Now that we got the initial allocation guess we set the per_time_slot allocation
             self.per_time_slot_allocation = True
 
             bounds = [(0, None) for _ in range(self.amount_of_service_providers)]
             # Best result so far is 'ftol'~ 1e-12,'eps'~ 1e-9, and not calling gradient_of_total_utility
             # Faster results can be achieved by calling gradient_of_total_utility
-            sol = minimize(self._objective, np.asarray(sol.x[:-1]), method='slsqp',
+            sol = minimize(self._objective, initial_allocations, method='slsqp',
                            bounds=bounds,
-                           options={'ftol': 1e-6,
+                           options={'ftol': 1e-12,
                                     # Stop criteria, process is stopped when |f_n - f_{n-1}| < ftol, default ~ 1e-6
-                                    'eps': 1.5e-5,
+                                    'eps': 1.5e-9,
                                     # Step size used for numerical approximation of the Jacobian, default ~ 1.5e-5
-                                    'maxiter': 1000,  # Max amount of iteration
-                                    'disp': False})
+                                    'maxiter': 5000,  # Max amount of iteration
+                                    'disp': True})
 
             max_alloc_for_player = [max(sol.x[player::self.amount_of_service_providers]) for player in
                                     range(self.amount_of_service_providers)]

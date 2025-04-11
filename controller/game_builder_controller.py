@@ -123,6 +123,7 @@ class GameBuilderController:
 
         # We iterate over the daily time slots, to create the load functions and also to create the games
         for daily_tl in self.parse_value_list(game_data['daily_timeslots']):
+
             service_providers_load_functions = []
             # First we calculate all the load functions and assign them to the players
             # We need the value of the load function for each timeslot
@@ -194,6 +195,11 @@ class GameBuilderController:
                         service_providers_load_functions.append(sp_aux)
                         saved_service_provider.load_functions.append([load_function_id, sigma, avg_load, loads])
 
+
+
+
+
+
             # If a players have two or more load functions, then we need to create a different game for each combination of them
             # This code is to create a list of lists, where the inner one is the load function for each player and the external one
             # has an element for each different game to be created due to different load functions
@@ -214,75 +220,80 @@ class GameBuilderController:
             # Now that we created and assigned load functions we will create the games and assign them the corresponding function
             for max_cor_h in self.parse_value_list(game_data['max_cores_hosted']):
                 for year in years_list:
+                    for p_val in self.parse_value_list(game_data['p_value']):
+                        for q_val in self.parse_value_list(game_data['q_value']):
+                            # self.parse_value_list(game_data['cpu_price']):
+                            for price in prices:
+                                for sp_list in result_service_providers_list:
 
-                    # self.parse_value_list(game_data['cpu_price']):
-                    for price in prices:
-                        for sp_list in result_service_providers_list:
+                                    sp_utility_functions = []
+                                    for sp in game_data['service_providers']:
+                                        benefit_factors = self.parse_value_list(sp['benefit_factor'])
+                                        xis = self.parse_value_list(sp['xi'])
+                                        # Generate all combinations of benefit_factor and xi for this service provider
+                                        combinations = list(itertools.product(benefit_factors, xis))
+                                        sp_utility_functions.append(combinations)
 
-                            sp_utility_functions = []
-                            for sp in game_data['service_providers']:
-                                benefit_factors = self.parse_value_list(sp['benefit_factor'])
-                                xis = self.parse_value_list(sp['xi'])
-                                # Generate all combinations of benefit_factor and xi for this service provider
-                                combinations = list(itertools.product(benefit_factors, xis))
-                                sp_utility_functions.append(combinations)
+                                    # Create the cartesian product of combinations across all service providers
+                                    all_sp_utility_functions_combinations = list(itertools.product(*sp_utility_functions))
+                                    for combination in all_sp_utility_functions_combinations:
+                                        # Price is variable
+                                        if isinstance(price, tuple):
 
-                            # Create the cartesian product of combinations across all service providers
-                            all_sp_utility_functions_combinations = list(itertools.product(*sp_utility_functions))
-                            for combination in all_sp_utility_functions_combinations:
-                                # Price is variable
-                                if isinstance(price, tuple):
+                                            game = Game(game_data['simulation_name'], years=year,
+                                                        max_cores_hosted=max_cor_h,
+                                                        min_cores_hosted=price[0],
+                                                        min_cpu_price=price[1],
+                                                        max_cpu_price=price[2],
+                                                        amount_of_players=1,
+                                                        daily_timeslots=daily_tl,
+                                                        p_value=p_val,
+                                                        q_value=q_val)
+                                        # Price is fixed
+                                        else:
+                                            game = Game(game_data['simulation_name'], years=year,
+                                                        max_cores_hosted=max_cor_h,
+                                                        min_cores_hosted=0,
+                                                        min_cpu_price=price,
+                                                        max_cpu_price=price,
+                                                        amount_of_players=1,
+                                                        daily_timeslots=daily_tl,
+                                                        p_value=p_val,
+                                                        q_value=q_val)
 
-                                    game = Game(game_data['simulation_name'], years=year,
-                                                max_cores_hosted=max_cor_h,
-                                                min_cores_hosted=price[0],
-                                                min_cpu_price=price[1],
-                                                max_cpu_price=price[2],
-                                                amount_of_players=1,
-                                                daily_timeslots=daily_tl)
-                                # Price is fixed
-                                else:
-                                    game = Game(game_data['simulation_name'], years=year,
-                                                max_cores_hosted=max_cor_h,
-                                                min_cores_hosted=0,
-                                                min_cpu_price=price,
-                                                max_cpu_price=price,
-                                                amount_of_players=1,
-                                                daily_timeslots=daily_tl)
+                                        # Network owner takes name from the simulation name
+                                        network_owner = NetworkOwner(game_data['simulation_name'])
+                                        game.add_player(network_owner)
+                                        i = 0
+                                        for j, serv_prov in enumerate(sp_list):
+                                            if cloned_sp[j]:
+                                                i -= 1
+                                            util_funct = combination[i]
+                                            i += 1
+                                            # It will create len('service_provider_name') players with the same values but different names
+                                            # This is just to easily add many players with the same values
+                                            # for sp_load_funct in osp:
+                                            service_provider = ServiceProvider(
+                                                player_id=serv_prov.player_id,
+                                                player_name=serv_prov.player_name, avg_load=serv_prov.avg_load,
+                                                benefit_factor=util_funct[0], xi=util_funct[1],
+                                                sigma=serv_prov.sigma_load, hyperparameters=serv_prov.hyperparameters,
+                                                load_function=serv_prov.load_function,
+                                                load_function_id=serv_prov.load_function_id)
 
-                                # Network owner takes name from the simulation name
-                                network_owner = NetworkOwner(game_data['simulation_name'])
-                                game.add_player(network_owner)
-                                i = 0
-                                for j, serv_prov in enumerate(sp_list):
-                                    if cloned_sp[j]:
-                                        i -= 1
-                                    util_funct = combination[i]
-                                    i += 1
-                                    # It will create len('service_provider_name') players with the same values but different names
-                                    # This is just to easily add many players with the same values
-                                    # for sp_load_funct in osp:
-                                    service_provider = ServiceProvider(
-                                        player_id=serv_prov.player_id,
-                                        player_name=serv_prov.player_name, avg_load=serv_prov.avg_load,
-                                        benefit_factor=util_funct[0], xi=util_funct[1],
-                                        sigma=serv_prov.sigma_load, hyperparameters=serv_prov.hyperparameters,
-                                        load_function=serv_prov.load_function,
-                                        load_function_id=serv_prov.load_function_id)
+                                            if serv_prov.true_load_function:
+                                                service_provider.true_load_function_id = serv_prov.true_load_function_id
+                                                service_provider.true_avg_load = serv_prov.true_avg_load
+                                                service_provider.true_sigma = serv_prov.true_sigma_load
+                                                service_provider.true_hyperparameters = serv_prov.true_hyperparameters
+                                                service_provider.true_load_function = serv_prov.true_load_function
+                                            if serv_prov.true_xi:
+                                                service_provider.true_xi = serv_prov.true_xi
+                                                service_provider.true_benefit_factor = serv_prov.true_benefit_factor
 
-                                    if serv_prov.true_load_function:
-                                        service_provider.true_load_function_id = serv_prov.true_load_function_id
-                                        service_provider.true_avg_load = serv_prov.true_avg_load
-                                        service_provider.true_sigma = serv_prov.true_sigma_load
-                                        service_provider.true_hyperparameters = serv_prov.true_hyperparameters
-                                        service_provider.true_load_function = serv_prov.true_load_function
-                                    if serv_prov.true_xi:
-                                        service_provider.true_xi = serv_prov.true_xi
-                                        service_provider.true_benefit_factor = serv_prov.true_benefit_factor
+                                            game.amount_of_players += 1
+                                            game.add_player(service_provider)
 
-                                    game.amount_of_players += 1
-                                    game.add_player(service_provider)
-
-                                sim.games.append(game)
+                                        sim.games.append(game)
 
         return sim

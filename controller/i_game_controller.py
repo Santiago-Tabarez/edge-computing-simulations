@@ -14,7 +14,7 @@ class IGameController(ABC):
     @staticmethod
     @abstractmethod
     def players_contribution(game):
-        """Calculate each player's contribution to the grand coalition."""
+        """Calculate each player's contribution to the grand coalition using the Shapley value."""
         pass
 
     @staticmethod

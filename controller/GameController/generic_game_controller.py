@@ -19,9 +19,9 @@ class GenericGameController:
     # This should be called only when N.O. is in the coalition
     @staticmethod
     def calculate_coal_payoff(game, coal):
-        # Skip first players since it is the N.O.
+        # We skip first player since it is the N.O.
         opt = Optimization(game.min_cpu_price, game.max_cpu_price, game.min_cores_hosted, game.max_cores_hosted,
-                           game.daily_timeslots, game.years * 365, coal.players[1:])
+                           game.daily_timeslots, game.years * 365, game.p_value, game.q_value, coal.players[1:])
 
         sol, utilities, price = opt.maximize_coalition_payoff()
         coal.allocation = [0] + list(sol['x'][:-1])
@@ -47,10 +47,10 @@ class GenericGameController:
         gc.net_utilities = [0] * game.amount_of_players
         gc.coalition_payoff = -sol['fun']
         # Save the total cpu price
-        # If variable
+        # If cpu_price is variable
         if cpu_price:
             gc.total_cpu_price = cpu_price
-        # If fixed
+        # If cpu_price is fixed
         else:
             gc.total_cpu_price = game.min_cpu_price * sum(gc.allocation)
 
@@ -85,11 +85,12 @@ class GenericGameController:
         logger.info("Grand coalition total payoff (net utilities) is %s:", gc.coalition_payoff)
 
     @staticmethod
+    # p_cpu is the total CPU price
     def players_revenue_and_payment(game, p_cpu):
 
         players_numb = game.amount_of_players
         payoff_vector = game.grand_coalition.shapley_value
-        w = sum(game.grand_coalition.allocation)
+        # w = sum(game.grand_coalition.allocation)
 
         constraints = [{
             'type': 'eq',

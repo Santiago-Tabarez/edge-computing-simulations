@@ -357,7 +357,14 @@ class DAOController:
                     # Is NO
                     if i == 0:
                         values = (
-                            sim.network_owner.player_id, game_id, shapley_value, revenues, payment)
+                            sim.network_owner.player_id,
+                            game_id,
+                            float(shapley_value),
+                            float(revenues),
+                            float(payment)
+                        )
+                        #values = (
+                        #    sim.network_owner.player_id, game_id, shapley_value, revenues, payment)
                         cursor.execute(insert_network_owner_game, values)
                     # Is SP
                     else:
@@ -367,9 +374,9 @@ class DAOController:
                         utilities = game.grand_coalition.utilities[i]
                         load_function_id = game.players[i].load_function_id
                         values = (
-                            sim.players[i - 1].player_id, game_id, benefit_factor, xi, allocation, utilities,
-                            shapley_value,
-                            revenues, load_function_id, payment)
+                            sim.players[i - 1].player_id, game_id, benefit_factor, xi, float(allocation), utilities,
+                            float(shapley_value),
+                            float(revenues), load_function_id, float(payment))
                         cursor.execute(insert_service_provider_game, values)
 
                     self.mydb.commit()

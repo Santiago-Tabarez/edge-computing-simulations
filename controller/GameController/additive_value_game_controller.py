@@ -14,15 +14,15 @@ class AdditiveValueGameController(IGameController):
     # Calculate only the grand coalition payoff
     @staticmethod
     def calculate_coal_payoff(game: Game):
-        avc = AdditiveValueCalculationController()
-        avc.calculate_optimal_allocations(game)
+        #avc = AdditiveValueCalculationController()
+        #avc.calculate_optimal_allocations(game)
 
         # FIXME DEPRECATED
         ggc = GenericGameController()
 
         # We remove the NO from the optimization since it doesn't use any edge resources
         opt = Optimization(game.min_cpu_price, game.max_cpu_price, game.min_cores_hosted, game.max_cores_hosted,
-                           game.daily_timeslots, game.years * 365, game.players[1:])
+                           game.daily_timeslots, game.years * 365, game.p_value, game.q_value, game.players[1:])
         # Calculate the maximum value for grand coalition
         sol, utilities, price = opt.maximize_coalition_payoff()
 

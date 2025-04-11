@@ -2,15 +2,29 @@
 
 # Only one value accepted
 # Identifies the set of games defined in this file
-simulation_name : Sim_5
+simulation_name : Sim_50
 
 # All the following properties in this file have 3 different possible assigment configuration:
 # immediate number, ex: price_cpu: 0.5
 # explicit list of values, ex: price_cpu: [0.5,06]
 # implicit list of values with the format ['Initial_val:Final_val:amount_of_values'], ex, cpu_price: ['0.5:1:5']
 
-max_cores_hosted: [44000] #44000
+max_cores_hosted: [44000] # Max amount of cores hosted at the Edge
+# default = 44000
 
+# Investment period, it can be a fraction to enable sensitivity analysis
+years: [3]
+# Amount of time slots in a day, used to calculate load and utilit functions
+daily_timeslots: [96]
+
+# Give the net utility function
+# U_net = beta * load * (1 - e ^ (- xi * h)) - d' * h
+# We redefine the utility function as:
+# U_net = beta * load * (1 - e ^ - (xi *f(h))) - d' * h
+# Where f(h) = (h/load^(1-p)*xi^(q)) and p and q take values between 0 and 1
+
+p_value : [0.5]   # Adjust the influence of the average load, set to 1 to keep the original model, reduce it to make the model more elastic
+q_value : [0]   # Adjust the influence of xi, set to 0 to keep the original model
 
 # Price per resource unit dollars/millicores for the whole investment period
 prices:
@@ -22,28 +36,9 @@ prices:
   # Prices and settings to use when the external variable is false
   when_variable:
       # Following 3 work together and need equal amount of elements
-      min_cores_hosted: [0]  # Min amount of cores hosted at the Edge
+      min_cores_hosted: [0]  # Min amount of cores hosted at the Edge, this may make small coalition to have 0 value
       min_cpu_price: [0.1]  # Price per unit when allocating max_cores_hosted resources
       max_cpu_price: [0.5]  # Price per unit when allocating min_cores_hosted
-
-
-# This value is used if non-additive value function
-# All three following values should have the same amount of values and the total amount of games will be multiplied for that amount
-
-# Min amount of cores hosted at the Edge, this may make small coalition to have 0 value
-#min_cores_hosted: [0,0]
-# Max amount of cores hosted at the Edge
-
-# This is the price per unit when allocating max_cores_hosted resources
-#min_cpu_price: [0.5,1]
-# This is the price per unit when allocating min_cores_hosted
-#max_cpu_price: [50,100]
-
-
-# Investment period, it can be a fraction to enable sensitivity analysis
-years: [3]
-# Amount of time slots in a day, used to calculate load and utilit functions
-daily_timeslots: [96]
 
 
 service_providers:
@@ -54,7 +49,7 @@ service_providers:
     avg_load: [48530] # average load
     # hyperparameters: used to define the load function, a_k determining the amplitude (requests) and t_k the offset (time in seconds)
     a_k:
-      - [-25313, 8832, -1757, 2873]
+      - [25313, -8832, 1757, -2873]
     t_k:
       - [47340, 49080, 44520, 44880]
 
@@ -72,23 +67,23 @@ service_providers:
     sigma: [0]
     avg_load: [48530]
     a_k:
-      - [25313, -8832, 1757, -2873]
+      - [-25313, 8832, -1757, 2873]
     t_k:
       - [47340, 49080, 44520, 44880]
     # Utility function
-    benefit_factor: [3.805175038051751e-07] #[3.805175038051751e-07]
+    benefit_factor: [1.5220700152207003e-06] #[3.805175038051751e-07]
     xi: [0.08] # [0.08]
 
         # True values, only one value accepted for each parameter, this won't increase the amount of games
-    true_sigma: 0
-    true_avg_load: 48530
-    true_a_k:
-      - [25313, -8832, 1757, -2873 ]
-    true_t_k:
-      - [ 47340, 49080, 44520, 44880 ]
+    #true_sigma: 0
+    #true_avg_load: 48530
+    #true_a_k:
+    #  - [25313, 8832, 1757, 2873 ]
+    #true_t_k:
+    #  - [ 47340, 49080, 44520, 44880 ]
         # Utility function
-    true_benefit_factor: 1.5220700152207003e-06 #[ 1.610350076103502e-06 ]
-    true_xi: 0.07 # [0.8 ]
+    #true_benefit_factor: 1.5220700152207003e-06 #[ 1.610350076103502e-06 ]
+    #true_xi: 0.07 # [0.8 ]
 
 
 #ORIGINAL CODE VALUES:

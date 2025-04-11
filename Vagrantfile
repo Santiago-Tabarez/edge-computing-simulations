@@ -6,17 +6,18 @@ Vagrant.configure("2") do |config|
 
   # Network configuration
   config.vm.network "forwarded_port", guest: 8000, host: 8000
+  config.vm.network "forwarded_port", guest: 3000, host: 3000  # Metabase default port
 
   # VM basic config
   config.vm.provider "virtualbox" do |vb|
-    vb.memory = "2048"
+    vb.memory = "4096"
     vb.cpus = 2
   end
 
   # Sync the project directory
   config.vm.synced_folder ".", "/home/vagrant/project", type: "virtualbox"
 
-  # Provision to install Python, MySQL, and dependencies
+  # Provision to install Python, MySQL, Java, and Metabase
   config.vm.provision "shell", inline: <<-SHELL
     set -e  # Exit if any command fails
 
@@ -36,7 +37,8 @@ Vagrant.configure("2") do |config|
       liblzma-dev \
       mysql-server \
       libmysqlclient-dev \
-      pkg-config
+      pkg-config \
+      openjdk-11-jdk  # Install Java
 
     # Download and install Python 3.12.1 from source if not installed
     if ! command -v python3.12; then
@@ -74,11 +76,36 @@ Vagrant.configure("2") do |config|
     # Activate the virtual environment and install dependencies
     source /home/vagrant/env/bin/activate
     pip install --upgrade pip
-    pip install -r /home/vagrant/edge-computing-simulation/requirements.txt
+    pip install -r /home/vagrant/project/requirements.txt
 
-    # Deactivate the virtual environment
+    # Download and setup Metabase
+    if [ ! -f /home/vagrant/metabase.jar ]; then
+      curl -Lo /home/vagrant/metabase.jar https://downloads.metabase.com/v0.44.6/metabase.jar
+    fi
+
+    # Create a systemd service file for Metabase
+    echo "[Unit]
+    Description=Metabase
+    After=syslog.target
+    After=network.target
+
+    [Service]
+    User=vagrant
+    ExecStart=/usr/bin/java -jar /home/vagrant/metabase.jar
+    Restart=always
+    StandardOutput=syslog
+    StandardError=syslog
+    SyslogIdentifier=metabase
+
+    [Install]
+    WantedBy=multi-user.target" | sudo tee /etc/systemd/system/metabase.service
+
+    # Reload systemd, enable and start Metabase service
+    sudo systemctl daemon-reload
+    sudo systemctl enable metabase
+    sudo systemctl start metabase
     deactivate
-    echo "export PYTHONPATH=/home/vagrant/edge-computing-simulation" >> /home/vagrant/.bashrc
+    echo "export PYTHONPATH=/home/vagrant/project" >> /home/vagrant/.bashrc
   SHELL
 
   # Enable cache if the plugin is installed

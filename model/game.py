@@ -1,12 +1,14 @@
 class Game:
 
-    def __init__(self, simulation_id, years, max_cores_hosted, min_cores_hosted, min_cpu_price, max_cpu_price, amount_of_players, daily_timeslots):
+    def __init__(self, simulation_id, years, max_cores_hosted, min_cores_hosted, min_cpu_price, max_cpu_price, amount_of_players, daily_timeslots, p_value, q_value):
         self.simulation_id = simulation_id
         self.years = years
         self.max_cores_hosted = max_cores_hosted
         self.min_cores_hosted = min_cores_hosted
         self.min_cpu_price = min_cpu_price
         self.max_cpu_price = max_cpu_price
+        self.p_value = p_value
+        self.q_value = q_value
         if self.min_cpu_price == self.max_cpu_price:
             self.fixed_price = min_cpu_price
             self.weighted_per_unit_price = None
