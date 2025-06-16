@@ -23,7 +23,7 @@ DATABASE_CONNECTION_CONFIG = {
     'port': 3306,
     'user': 'admin',
     'password': 'admin',
-    'database': 'edge_computing_aux',
+    'database': 'edge_computing',
 }
 
 

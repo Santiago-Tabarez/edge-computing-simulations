@@ -1,3 +1,4 @@
+import os
 import sys
 import mysql.connector
 import logging.config
@@ -33,17 +34,23 @@ class DAOController:
             logger.error("Only one should be true to modify database and none to run simulations.")
             sys.exit(0)
 
-        sql_file_path = None
+        # Determine script directory relative to this file
+        base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+        scripts_dir = os.path.join(base_dir, 'sql_scripts')
 
         if truncate:
             input("database tables are going to be truncated, press enter to continue...")
-            sql_file_path = '../sql scripts/truncate.sql'
-        if drop:
+            sql_file_path = os.path.join(scripts_dir, 'truncate.sql')
+        elif drop:
             input("Database tables are going to be dropped, press enter to continue...")
-            sql_file_path = '../sql scripts/drop.sql'
-        if create:
+            sql_file_path = os.path.join(scripts_dir, 'drop.sql')
+        else:  # create
             input("database tables are going to be created, press enter to continue...")
-            sql_file_path = '../sql scripts/create.sql'
+            sql_file_path = os.path.join(scripts_dir, 'create.sql')
+
+        if not os.path.isfile(sql_file_path):
+            logger.error("SQL script not found: %s", sql_file_path)
+            sys.exit(1)
 
         with open(sql_file_path, 'r') as file:
             sql_commands = file.read().strip()
