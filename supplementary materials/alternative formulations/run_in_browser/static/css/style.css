@@ -1,0 +1,90 @@
+/* --- Reset & Container --- */
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+body {
+  font-family: sans-serif;
+  background: #fafafa;
+}
+.container {
+  max-width: 900px;
+  margin: 1rem auto;
+  padding: 0 1rem;
+  box-sizing: border-box;
+}
+
+/* --- Heading & Notifications --- */
+h1 {
+  margin-bottom: 1rem;
+}
+.flash {
+  padding: 0.5rem;
+  margin-bottom: 1rem;
+  border-radius: 4px;
+  font-size: 0.95rem;
+}
+.flash.success { background: #d4edda; }
+.flash.danger  { background: #f8d7da; }
+
+/* --- Editor Layout: two panels side by side --- */
+.editor-wrapper {
+  display: flex;
+  gap: 1rem;
+  height: 70vh; /* 70% of viewport height */
+}
+
+/* --- Panel Styling --- */
+.panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.panel h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+}
+
+/* --- Textareas: vertical resize only --- */
+textarea {
+  flex: 1;             /* fill remaining panel height */
+  width: 100%;
+  box-sizing: border-box;
+  font-family: monospace;
+  font-size: 1rem;
+  line-height: 1.2;    /* tight lines */
+  padding: 0.5rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  resize: vertical;    /* only vertical handle */
+  overflow: auto;
+  min-height: 10rem;
+}
+
+/* --- Flags (checkboxes) --- */
+.flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+.flags label {
+  font-family: monospace;
+  font-size: 0.9rem;
+}
+
+/* --- Save Button --- */
+.save-button {
+  margin-top: 1rem;
+  padding: 0.5rem 1rem;
+  font-size: 1rem;
+  background: #007bff;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.save-button:hover {
+  background: #0056b3;
+}

@@ -94,7 +94,8 @@ class DAOController:
                     sys.exit(
                         "This simulation name is already present in the database with different players, change simulation name or delete old simulation from database.")
                 else:
-                    logger.warning("Simulation name already present in the database, games with same parameter are going to be updated, press Enter to continue")
+                    logger.warning(
+                        "Simulation name already present in the database, games with same parameter are going to be updated, press Enter to continue")
                     input()
 
                 if sim.max_cores_hosted_min > old_sim[2]:
@@ -147,6 +148,8 @@ class DAOController:
                                 benefit_factor_max = %s,
                                 xi_min = %s,
                                 xi_max = %s,
+                                frac_sev_at_edge_min = %s, 
+                                frac_sev_at_edge_max = %s,
                                 avg_load_min = %s,
                                 avg_load_max = %s
                            WHERE service_provider_name = %s AND simulation_id = %s; 
@@ -169,9 +172,15 @@ class DAOController:
                         player.avg_load)
                     max_avg_load = db_serv_provider[8] if db_serv_provider[8] < max(player.avg_load) else max(
                         player.avg_load)
+                    min_frac = db_serv_provider[9] if db_serv_provider[9] < min(player.frac_of_req) else min(
+                        player.frac_of_req)
+                    max_frac = db_serv_provider[10] if db_serv_provider[10] < max(player.frac_of_req) else max(
+                        player.frac_of_req)
 
-                    values = (min_benefit_factor, max_benefit_factor, min_xi, max_xi,
+                    values = (min_benefit_factor, max_benefit_factor,
+                              min_xi, max_xi,
                               min_avg_load, max_avg_load,
+                              min_frac, max_frac,
                               player.service_provider_name, sim.simulation_id)
 
                     cursor.execute(update_service_provider, values)
@@ -216,15 +225,18 @@ class DAOController:
                 # save the service providers with min and max values of their load and utility functions
                 insert_service_provider = """
                 INSERT INTO service_providers ( service_provider_name, simulation_id, benefit_factor_min,
-                    benefit_factor_max, xi_min, xi_max, avg_load_min, avg_load_max) 
-                VALUES ( %s, %s, %s, %s, %s, %s, %s, %s);
+                    benefit_factor_max, xi_min, xi_max, frac_sev_at_edge_min, frac_sev_at_edge_max, avg_load_min, avg_load_max) 
+                VALUES ( %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
                                          """
                 for player in sim.players:
                     values = (
                         player.service_provider_name, sim.simulation_id, min(player.benefit_factor),
                         max(player.benefit_factor),
                         min(player.xi),
-                        max(player.xi), min(player.avg_load), max(player.avg_load))
+                        max(player.xi),
+                        min(player.frac_of_req),
+                        max(player.frac_of_req),
+                        min(player.avg_load), max(player.avg_load))
 
                     cursor.execute(insert_service_provider, values)
                     self.mydb.commit()
@@ -243,9 +255,9 @@ class DAOController:
         try:
             load_function_ids = [player.load_function_id for player in game.players[1:]]
             joined_load_ids = ', '.join(['%s'] * len(load_function_ids))
-            xis = [player.xi for player in game.players[1:]]
+            xis = [float(player.xi) for player in game.players[1:]]
             joined_xi = ', '.join(['%s'] * len(xis))
-            benefit = [player.benefit_factor for player in game.players[1:]]
+            benefit = [float(player.benefit_factor) for player in game.players[1:]]
             joined_benefit = ', '.join(['%s'] * len(benefit))
 
             select_game_id = f"""
@@ -256,6 +268,7 @@ class DAOController:
                                 AND g.cpu_price = %s
                                 AND g.years = %s 
                                 AND g.daily_timeslots = %s
+                                AND g.utility_funct_case = %s
                                 AND spg.game_id IN (
                                     SELECT spg_inner.game_id
                                     FROM service_providers_games AS spg_inner
@@ -267,10 +280,11 @@ class DAOController:
                                 ) 
                                 GROUP BY g.id
                              """
-            # TODO CHANGE THIS TO SAVE MAX AND MIN PRICES
+
             cpu_price = game.fixed_price if game.fixed_price is not None else game.weighted_per_unit_price
-            values = (sim.simulation_id, game.max_cores_hosted, cpu_price, game.years, game.daily_timeslots,
-                      *load_function_ids, *xis, *benefit,  len(load_function_ids))
+            values = (sim.simulation_id, game.max_cores_hosted, float(cpu_price), game.years, game.daily_timeslots,
+                      game.chosen_case,
+                      *load_function_ids, *xis, *benefit, len(load_function_ids))
 
             cursor.execute(select_game_id, values)
             db_game_ids = cursor.fetchone()
@@ -287,7 +301,9 @@ class DAOController:
                                     shapley_value = %s, 
                                     revenues = %s, 
                                     load_function_id = %s, 
-                                    payments = %s
+                                    alloc_payment = %s,
+                                    frac_of_req = %s,
+                                    fairness_payment = %s
                                 WHERE service_provider_id = %s AND game_id = %s;
                                 """
 
@@ -295,32 +311,36 @@ class DAOController:
                                         UPDATE network_owners_games
                                         SET shapley_value = %s, 
                                             revenues = %s, 
-                                            payments = %s
+                                            fairness_payment = %s
                                         WHERE network_owner_id = %s AND game_id = %s;
                                          """
 
                 for i in range(game.amount_of_players):
 
                     shapley_value = game.grand_coalition.shapley_value[i]
-                    revenues = game.grand_coalition.revenues[i]
-                    payment = game.grand_coalition.payments[i]
+                    revenues = game.grand_coalition.utilities[i]
+                    allocation_payment = game.grand_coalition.allocation_payment[i]
+                    fairness_payment = game.grand_coalition.fairness_payment[i]
 
                     # Is NO
                     if i == 0:
                         values = (
-                            shapley_value, revenues, payment, sim.network_owner.player_id, game_id)
+                            float(shapley_value), float(revenues), float(fairness_payment), sim.network_owner.player_id,
+                            game_id)
                         cursor.execute(update_network_owner_game, values)
                     # Is SP
                     else:
                         benefit_factor = game.players[i].benefit_factor
                         xi = game.players[i].xi
+                        frac = game.players[i].frac_of_load_at_edge
                         allocation = game.grand_coalition.allocation[i]
                         utilities = game.grand_coalition.utilities[i]
                         load_function_id = game.players[i].load_function_id
                         values = (
-                            benefit_factor, xi, allocation, utilities,
-                            shapley_value,
-                            revenues, load_function_id, payment, sim.players[i - 1].player_id, game_id,)
+                            float(benefit_factor), float(xi), float(allocation), float(utilities),
+                            float(shapley_value),
+                            float(revenues), load_function_id, float(allocation_payment), float(frac),
+                            float(fairness_payment), sim.players[i - 1].player_id, game_id)
                         cursor.execute(update_service_provider_game, values)
 
                     self.mydb.commit()
@@ -328,22 +348,22 @@ class DAOController:
             else:
                 # Save global values of this game
                 insert_game = """
-                INSERT INTO games (simulation_id, max_cores_hosted, cpu_price, years, daily_timeslots) 
-                VALUES (%s, %s, %s, %s, %s);
+                INSERT INTO games (simulation_id, max_cores_hosted, cpu_price, years, daily_timeslots, utility_funct_case) 
+                VALUES (%s, %s, %s, %s, %s, %s);
                     """
 
-                values = (sim.simulation_id, game.max_cores_hosted, cpu_price, game.years, game.daily_timeslots)
+                values = (sim.simulation_id, game.max_cores_hosted, cpu_price, game.years, game.daily_timeslots, game.chosen_case)
 
                 cursor.execute(insert_game, values)
                 self.mydb.commit()
                 game_id = cursor.lastrowid
 
                 insert_service_provider_game = """
-                       INSERT INTO service_providers_games (service_provider_id, game_id, benefit_factor, xi, allocation, utilities, shapley_value, revenues, load_function_id, payments) 
-                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
+                       INSERT INTO service_providers_games (service_provider_id, game_id, benefit_factor, xi, allocation, utilities, shapley_value, revenues, load_function_id, alloc_payment, frac_of_req, fairness_payment) 
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
                        """
                 insert_network_owner_game = """
-                               INSERT INTO network_owners_games (network_owner_id, game_id, shapley_value, revenues, payments) 
+                               INSERT INTO network_owners_games (network_owner_id, game_id, shapley_value, revenues, fairness_payment) 
                                VALUES (%s, %s, %s, %s, %s);
                                """
                 # Save the value of load function and utility function for the current game
@@ -351,8 +371,9 @@ class DAOController:
                 for i in range(game.amount_of_players):
 
                     shapley_value = game.grand_coalition.shapley_value[i]
-                    revenues = game.grand_coalition.revenues[i]
-                    payment = game.grand_coalition.payments[i]
+                    revenues = game.grand_coalition.utilities[i]
+                    alloc_payments = game.grand_coalition.allocation_payment[i]
+                    fairness_payments = game.grand_coalition.fairness_payment[i]
 
                     # Is NO
                     if i == 0:
@@ -361,22 +382,23 @@ class DAOController:
                             game_id,
                             float(shapley_value),
                             float(revenues),
-                            float(payment)
+                            float(fairness_payments)
                         )
-                        #values = (
-                        #    sim.network_owner.player_id, game_id, shapley_value, revenues, payment)
                         cursor.execute(insert_network_owner_game, values)
                     # Is SP
                     else:
                         benefit_factor = game.players[i].benefit_factor
                         xi = game.players[i].xi
+                        frac_of_req = game.players[i].frac_of_load_at_edge
                         allocation = game.grand_coalition.allocation[i]
                         utilities = game.grand_coalition.utilities[i]
                         load_function_id = game.players[i].load_function_id
                         values = (
-                            sim.players[i - 1].player_id, game_id, benefit_factor, xi, float(allocation), utilities,
+                            sim.players[i - 1].player_id, game_id, float(benefit_factor), float(xi), float(allocation),
+                            float(utilities),
                             float(shapley_value),
-                            float(revenues), load_function_id, float(payment))
+                            float(revenues), load_function_id, float(alloc_payments), float(frac_of_req),
+                            float(fairness_payments))
                         cursor.execute(insert_service_provider_game, values)
 
                     self.mydb.commit()
@@ -395,7 +417,7 @@ class DAOController:
                                      VALUES (%s, %s, %s, %s);
                                          """
 
-                allocation = game.grand_coalition.allocation[1:]
+
                 for i, player in enumerate(game.players[1:]):
 
                     values = (player.player_id, game_id)
@@ -405,7 +427,6 @@ class DAOController:
                     # In case sigma != 0 we need to update generated values
                     db_load_funct = cursor.fetchall()
                     if db_load_funct is not None:
-
                         select_utility_functions = """ 
                                                 DELETE FROM utility_function_values 
                                                 WHERE player_id = %s 
@@ -415,81 +436,14 @@ class DAOController:
                         cursor.execute(select_utility_functions, values)
                         self.mydb.commit()
 
-                    utility = player.benefit_factor * np.array(player.load_function) * (
-                            1 - np.exp(-player.xi * allocation[i]))
-
+                    utility = player.benefit_factor * np.array(player.load_function) * player.frac_of_load_at_edge * game.years * 365
                     chart = [(i * 24 / game.daily_timeslots, utility[i]) for i in range(game.daily_timeslots - 1)]
 
                     for c in chart:
-                        values = (player.player_id, game_id, c[0], c[1])
+                        values = (player.player_id, game_id, c[0], float(c[1]))
                         cursor.execute(insert_service_utility_function, values)
 
                     self.mydb.commit()
-
-        except mysql.connector.Error as err:
-            logger.error("Error occurred: %s", err)
-
-        finally:
-            cursor.close()
-
-    def save_true_load_function(self, chart, player_id, avg_l, sigma, hyper_params):
-        cursor = self.mydb.cursor()
-        try:
-
-            select_load_functions = """
-                        SELECT id FROM true_load_functions 
-                        WHERE service_provider_id = %s 
-                        AND sigma = %s 
-                        AND avg_load = %s 
-                        AND hyper_params_a_k = %s 
-                        AND hyper_params_t_k = %s
-                    ;
-                    """
-            values = (player_id, sigma, avg_l, str(hyper_params[0]), str(hyper_params[1]))
-            cursor.execute(select_load_functions, values)
-
-            # This load function is not new
-            # In case sigma != 0 we need to update generated values
-            db_load_funct = cursor.fetchone()
-            if db_load_funct is not None:
-                function_id = db_load_funct[0]
-                if sigma != 0:
-                    if config.SAVE_FUNCTION['load']:
-
-                        update_service_provider_function = """
-                                                UPDATE true_load_function_values
-                                                SET load_value = %s
-                                                WHERE function_id = %s AND time = %s;
-                                                          """
-
-                        for i in chart:
-                            values = (i[1], player_id, function_id, i[0])
-                            cursor.execute(update_service_provider_function, values)
-                        self.mydb.commit()
-            else:
-                # id, service_provider_id, sigma, avg_load, hyper_params_a_k, hyper_params_t_k
-                insert_load_functions = """
-                                      INSERT INTO true_load_functions (service_provider_id, sigma , avg_load,  hyper_params_a_k ,hyper_params_t_k) 
-                                      VALUES (%s, %s, %s, %s, %s);
-                                          """
-
-                values = (player_id, sigma, avg_l, str(hyper_params[0]), str(hyper_params[1]))
-                cursor.execute(insert_load_functions, values)
-                function_id = cursor.lastrowid
-                # Save load function values for this game
-                if config.SAVE_FUNCTION['load']:
-                    insert_service_provider_function = """
-                                      INSERT INTO true_load_function_values (function_id, time, load_value) 
-                                      VALUES (%s, %s, %s);
-                                          """
-
-                    for i in chart:
-                        values = (function_id, i[0], i[1])
-                        cursor.execute(insert_service_provider_function, values)
-
-                    self.mydb.commit()
-
-            return function_id
 
         except mysql.connector.Error as err:
             logger.error("Error occurred: %s", err)
@@ -549,7 +503,7 @@ class DAOController:
                                   """
 
                     for i in chart:
-                        values = (function_id, i[0], i[1])
+                        values = (function_id, i[0], float(i[1]))
                         cursor.execute(insert_service_provider_function, values)
 
                     self.mydb.commit()

@@ -1,43 +1,46 @@
-from typing import List
-
 import numpy as np
-from scipy.optimize import minimize
 import logging.config
+from typing import List
+import warnings
 
+# We eliminate this warning from the console, this is due to
+# the method being to close to linear in some cases
+warnings.filterwarnings(
+    "ignore",
+    message="delta_grad == 0.0. Check if the approximated function is linear"
+)
+from scipy.optimize import minimize
 from config import config
 from model.service_provider import ServiceProvider
 from utils.cpu_cost import CPUCost
 
 logger = logging.getLogger(__name__)
 
-"""
-   This class used to calculate the maximum value of a coalition by optimizing the allocation of resources among service providers to maximize their combined payoff.
-
-   Attributes:
-       cpu_price (float): Price per CPU unit.
-       daily_timeslots (int): Number of timeslots in a daily.
-       amount_of_service_providers (int): Number of service providers involved.
-       max_cores_hosted (int): Maximum number of cores that can be deployed at the Edge.
-       horizon (int): Time in days of the co-investment duration
-       service_providers (List[ServiceProvider]): List of service providers participating in the coalition.
-
-"""
-
 
 class Optimization:
-
-    def __init__(self, min_cpu_price: float, max_cpu_price: float, min_cores_hosted: int, max_cores_hosted: int,
+    def __init__(self,
+                 min_cpu_price: float,
+                 max_cpu_price: float,
+                 min_cores_hosted: int,
+                 max_cores_hosted: int,
                  daily_timeslots: int,
-                 horizon: int, p_value: int, q_value: int, service_providers: List[ServiceProvider]):
+                 horizon: int,
+                 load_exponent: int,
+                 beta_exponent: int,
+                 xi_exponent: int,
+                 price_exponent: int,
+                 service_providers: List[ServiceProvider]):
 
         self.utilities: List[float] = []
-
         self.min_cpu_price = min_cpu_price
         self.max_cpu_price = max_cpu_price
         self.min_cores_hosted = min_cores_hosted
         self.max_cores_hosted = max_cores_hosted
-        self.q_value = q_value
-        self.p_value = p_value
+        self.load_exponent = load_exponent
+        self.beta_exponent = beta_exponent
+        self.xi_exponent = xi_exponent
+        self.price_exponent = price_exponent
+
         if min_cpu_price == max_cpu_price:
             self.fixed_cpu_price = min_cpu_price
             self.weighted_by_alloc_cpu_price = None
@@ -45,250 +48,244 @@ class Optimization:
             self.fixed_cpu_price = None
             self.weighted_by_alloc_cpu_price = 0
 
+        self.amortized_cpu_price = max_cpu_price / (daily_timeslots * horizon)
         self.daily_timeslots = daily_timeslots
         self.amount_of_service_providers = len(service_providers)
-
         self.horizon = horizon
         self.service_providers = service_providers
 
-        # Vectorized Pre-calculate and store as class variables for better performance
-        # loads_matrix is a 2D array where each row corresponds to a service provider's loads across timeslots
         self.loads_matrix = np.array([sp.load_function for sp in self.service_providers])
         self.beta_factors = np.array([sp.benefit_factor for sp in self.service_providers])
         self.xi_factors = np.array([sp.xi for sp in self.service_providers])
 
-        # Boolean
         self.per_time_slot_allocation = config.EXTRA_CONSIDERATIONS['per_time_slot_allocation']
-        # Used to save allocation by time slot
+
+        # TRUST_CONSTR_PARAMETERS parameters
+        self.gtol = config.TRUST_CONSTR_PARAMETERS['gtol']
+        self.xtol = config.TRUST_CONSTR_PARAMETERS['xtol']
+        self.barrier_tol = config.TRUST_CONSTR_PARAMETERS['barrier_tol']
+        self.maxiter = config.TRUST_CONSTR_PARAMETERS['maxiter']
+
         self.allocations = [0] * self.amount_of_service_providers * self.daily_timeslots
         self.total_allocation = 0
         self.max_alloc = [0] * self.amount_of_service_providers
 
-    # Calculates the gross utility produced by each service provider for all the timeslots
-    def _revenues(self, allocations):
+    def load_funct(self, t: int, i: int) -> float:
+        return self.loads_matrix[i, t]
 
-        if self.per_time_slot_allocation:
+    def utility_function(self, h: float, t: int, i: int) -> float:
+        xi_i = self.xi_factors[i]
+        l_i_t = self.load_funct(t, i)
+        beta_i = self.beta_factors[i]
+        price = self.amortized_cpu_price
 
-            # Reshape allocations to match loads_matrix's structure
-            self.allocations = np.asarray(allocations).reshape(self.amount_of_service_providers, self.daily_timeslots)
+        # Calculate exponent: h * xi^load_exponent * l^load_exponent * beta^beta_exponent * price^price_exponent
+        exp_arg = (
+                h
+                * (xi_i ** self.xi_exponent)
+                * (l_i_t ** self.load_exponent)
+                * (beta_i ** self.beta_exponent)
+                * (price ** self.price_exponent)
+        )
 
-            # Compute utilities for all service providers and timeslots
-
-            utility_matrix = self.beta_factors[:, np.newaxis] * self.loads_matrix * (1 - np.exp
-            ((-self.xi_factors[:, np.newaxis] * allocations) / (
-                    self.loads_matrix ** (1 - self.p_value) * (self.xi_factors ** self.q_value))))
-
-            # Sum utilities across timeslots for each service provider
-            utilities_sum_per_sp = utility_matrix.sum(axis=1)
-
-            # Multiply by horizon for total gross utilities for each service provider
-            self.utilities = utilities_sum_per_sp * self.horizon
-
-            # Sum across service providers for total utility which we aim to maximize
-            total_revenues = np.sum(self.utilities)
-            return total_revenues
-
-        else:
-
-            utility_matrix = self.beta_factors[:, None] * self.loads_matrix * (
-                    1 - np.exp(
-                (-self.xi_factors[:, None] * allocations[:, None]) / (
-                        self.loads_matrix ** (1 - self.p_value) * (self.xi_factors[:, None] ** self.q_value))))
-            # Total utility for each service provider multiplied by the investment duration
-            # Flatten the matrix into an array of the sums of utility function throw the timeslots
-            total_utilities = np.sum(utility_matrix,
-                                     axis=1) * self.horizon
-
-            # Update 'utilities' with the total utilities for each service provider
-            self.utilities = total_utilities.tolist()
-            total_revenues = np.sum(total_utilities)
-
-            return total_revenues
-
-    def load_funct(self, t, i):
-        load = self.loads_matrix[i, t]
-        return load
-
-    def utility_function(self, h, t, i):
-
-        util = self.beta_factors[i] * self.load_funct(t, i) * (1 - np.exp(
-            (-self.xi_factors[i] * h) / (
-                    self.load_funct(t, i) ** (1 - self.p_value) * (self.xi_factors[i] ** self.q_value))))
-        # print("timeslot", t, "player", i, "utility", util, "allocation", h)
-        return util
+        return beta_i * l_i_t * (1 - np.exp(-exp_arg))
 
     @staticmethod
     def global_allocation_constraint(x: List[float], global_alloc: float) -> float:
         return global_alloc - sum(x)
 
-    # This function returns the negative utility
-    def time_slot_utility(self, ts_alloc, ts):
-
+    def time_slot_utility(self, ts_alloc: np.ndarray, ts: int) -> float:
         utility_ts_sum = 0
-
         for i in range(self.amount_of_service_providers):
             utility_ts_sum += self.utility_function(ts_alloc[i], ts, i)
+        cost = self._per_slot_cost()
+        return -1 * (utility_ts_sum * self.horizon - cost)
 
-        if self.min_cpu_price == self.max_cpu_price:
+    def time_slot_utility_hess(self, ts_alloc: np.ndarray, ts: int) -> np.ndarray:
+        loads = self.loads_matrix[:, ts]
+        xi = self.xi_factors
+        beta = self.beta_factors
+        price = self.amortized_cpu_price
+        M = (xi ** self.xi_exponent) * (loads ** self.load_exponent) * (beta ** self.beta_exponent) * (
+                price ** self.price_exponent)
+        exp_term = np.exp(-M * ts_alloc)
+        diag = - beta * loads * (M ** 2) * exp_term
+        return np.diag(self.horizon * (-diag))
 
-            # If the CPU price by unit is fixed
-            cost = self.fixed_cpu_price * sum(self.max_alloc)
+    def time_slot_utility_jac(self, ts_alloc: np.ndarray, ts: int) -> np.ndarray:
+
+        loads = self.loads_matrix[:, ts]  # forma (n_providers,)
+        xi = self.xi_factors  # forma (n_providers,)
+        beta = self.beta_factors  # forma (n_providers,)
+        price = self.amortized_cpu_price  # float
+
+        # Build M_i = xi_i^load_exponent * l_{i,t}^load_exponent *
+        #                 beta_i^beta_exponent * price^price_exponent
+        M = (
+                (xi ** self.xi_exponent)
+                * (loads ** self.load_exponent)
+                * (beta ** self.beta_exponent)
+                * (price ** self.price_exponent)
+        )
+
+        # Calculate exp(-M_i * h_i) para cada i
+        exp_term = np.exp(- M * ts_alloc)  # forma (n_providers,)
+        dU = beta * loads * exp_term * M  # forma (n_providers,)
+        return - self.horizon * dU  # forma (n_providers,)
+
+    def _per_slot_cost(self) -> float:
+        return (sum(self.max_alloc) * self.fixed_cpu_price) / self.daily_timeslots
+
+    def _revenues(self, allocations: np.ndarray) -> float:
+        if self.per_time_slot_allocation:
+            self.allocations = allocations.reshape(self.amount_of_service_providers, self.daily_timeslots)
+            # Utilities matrix for each SP and each time-slot
+            utility_matrix = self.beta_factors[:, np.newaxis] * self.loads_matrix * (
+                    1 - np.exp(
+                - allocations[:, None]
+                * (self.xi_factors[:, None] ** self.xi_exponent)
+                * (self.loads_matrix ** self.load_exponent)
+                * (self.beta_factors[:, None] ** self.beta_exponent)
+                * (self.amortized_cpu_price ** self.price_exponent)
+            )
+            )
+            utilities_sum_per_sp = utility_matrix.sum(axis=1)
+            self.utilities = utilities_sum_per_sp * self.horizon
+            return self.utilities.sum()
         else:
-            # If the CPU by unit decrease as total amount of allocated CPU increases
-            # Linear interpolation for price reduction
-            cost = self.weighted_by_alloc_cpu_price = CPUCost.linear_interpolation_weighted_price(self.min_cpu_price,
-                                                                                                  self.max_cpu_price,
-                                                                                                  self.min_cores_hosted,
-                                                                                                  self.max_cores_hosted,
-                                                                                                  sum(self.max_alloc))
-        # TODO review if it is correct tp divide price equally
-        cost = cost / self.daily_timeslots
-        cost = (sum(self.max_alloc) * self.fixed_cpu_price) / 96
-        return - 1 * (utility_ts_sum * self.horizon - cost)
+            utility_matrix = self.beta_factors[:, None] * self.loads_matrix * (
+                    1 - np.exp(
+                - allocations[:, None]
+                * (self.xi_factors[:, None] ** self.xi_exponent)
+                * (self.loads_matrix ** self.load_exponent)
+                * (self.beta_factors[:, None] ** self.beta_exponent)
+                * (self.amortized_cpu_price ** self.price_exponent)
+            )
+            )
+            total_utilities = utility_matrix.sum(axis=1) * self.horizon
+            self.utilities = total_utilities.tolist()
+            return total_utilities.sum()
 
-    # Used to maximize the payoff of a coalition
-    # Called by minimize from python lib, it will be executed an undetermined amount of times defined by the convergence criterion
-    # x is the allocation vector for service providers and the total capacity
     def _objective(self, allocation: List[float]) -> float:
-
-        # if config.EXTRA_CONSIDERATIONS['per_time_slot_allocation']:
         if self.per_time_slot_allocation:
             utility_sum = 0
-
             for t in range(self.daily_timeslots):
-                # Optimization for a time slot
-                bounds_ts = [(0, None)]
+                bounds_ts = [(0, None)] * self.amount_of_service_providers
                 ts_alloc = np.asarray(allocation)
-                constraint = ({'type': 'eq', 'fun': lambda x: self.global_allocation_constraint(x, sum(allocation))})
-                result_ts = minimize(self.time_slot_utility, ts_alloc, args=(t,), bounds=bounds_ts,
-                                     constraints=constraint,
-                                     method='SLSQP',
-                                     options={'ftol': 1e-12,
-                                              # Stop criteria, process is stopped when |f_n - f_{n-1}| < ftol, default ~ 1e-6
-                                              'eps': 1.5e-9,
-                                              # Step size used for numerical approximation of the Jacobian, default ~ 1.5e-5
-                                              'maxiter': 10000,  # Max amount of iteration
-                                              'disp': False})
+                constraint = {'type': 'eq', 'fun': lambda x: self.global_allocation_constraint(x, sum(allocation))}
+
+                result_ts = minimize(
+                    fun=self.time_slot_utility,
+                    x0=ts_alloc,
+                    args=(t,),
+                    jac=self.time_slot_utility_jac,
+                    hess=self.time_slot_utility_hess,
+                    bounds=bounds_ts,
+                    constraints=constraint,
+                    method='trust-constr',
+                    options={
+                        'gtol': self.gtol,
+                        'xtol': self.xtol,
+                        'barrier_tol': self.barrier_tol,
+                        'maxiter': self.maxiter,
+                        'verbose': 0
+                    }
+                )
 
                 if not result_ts.success:
-                    print(
-                        f"Optimization failed for time slot {t}. Reason: {result_ts.message}")
+                    print(f"Optimization failed for time slot {t}: {result_ts.message}")
                     continue
-                else:
-                    for i in range(self.amount_of_service_providers):
-                        al = t * self.amount_of_service_providers
-                        self.allocations[al + i] = result_ts.x[i]
-
-                # Summing up the negative of the result since we minimized the negative utility
+                for i in range(self.amount_of_service_providers):
+                    idx = t * self.amount_of_service_providers + i
+                    self.allocations[idx] = result_ts.x[i]
                 utility_sum -= result_ts.fun
-
                 if sum(result_ts.x) > sum(self.max_alloc):
-                    self.max_alloc = result_ts.x
-                    # self.max_alloc = result_ts.x
-
-            return -utility_sum  # Return negative for maximization
-
+                    self.max_alloc = result_ts.x.tolist()
+            return -utility_sum
         else:
             rev = self._revenues(np.array(allocation[:-1]))
-            # print("revenue:", rev)
             total_alloc = sum(allocation[:-1])
-        # Calculate net utilities from gross utilities, this is what we want to maximize
-        if self.min_cpu_price == self.max_cpu_price:
+            if self.min_cpu_price == self.max_cpu_price:
+                payoff = rev - self.fixed_cpu_price * total_alloc
+            else:
+                self.weighted_by_alloc_cpu_price = CPUCost.linear_interpolation_weighted_price(
+                    self.min_cpu_price, self.max_cpu_price,
+                    self.min_cores_hosted, self.max_cores_hosted,
+                    total_alloc
+                )
+                payoff = rev - self.weighted_by_alloc_cpu_price
+            return -1 * payoff
 
-            # If the CPU price by unit is fixed
-            payoff = rev - self.fixed_cpu_price * total_alloc
-        else:
-            # If the CPU by unit decrease as total amount of allocated CPU increases
-            # Linear interpolation for price reduction
-            self.weighted_by_alloc_cpu_price = CPUCost.linear_interpolation_weighted_price(self.min_cpu_price,
-                                                                                           self.max_cpu_price,
-                                                                                           self.min_cores_hosted,
-                                                                                           self.max_cores_hosted,
-                                                                                           total_alloc)
-            payoff = rev - self.weighted_by_alloc_cpu_price
-        # We are using minimize function, so we have to change the sign
-        return -1 * payoff
-
-    # Ensure the sum of allocations does not exceed the total Edge capacity
     @staticmethod
     def _max_allocation_constraint(x: List[float]) -> float:
         return sum(x[:-1]) - x[-1]
 
     @staticmethod
-    def max_per_time_slot_allocation_constraint(alloc: List[float], amount_of_sps, max_alloc) -> float:
-        by_time_slot_slices = [sum(alloc[i:i + amount_of_sps]) for i in
-                               range(0, len(alloc), amount_of_sps)]
-        # Find the greatest sum among all slices
-        greatest_sum = max(by_time_slot_slices)
+    def max_per_time_slot_allocation_constraint(alloc: List[float], amount_of_sps: int, max_alloc: float) -> float:
+        slices = [sum(alloc[i:i + amount_of_sps]) for i in range(0, len(alloc), amount_of_sps)]
+        return max_alloc - max(slices)
 
-        return max_alloc - greatest_sum
-
-    def allocation_constraints(self, allocations):
-
-        biggest_tuple_sum = (lambda x: np.max(np.sum(x.reshape(-1, self.amount_of_service_providers), axis=1)))(
-            allocations)
-        constraints = []
-
-        for t in range(self.daily_timeslots):
-            slot_allocation = sum(
-                allocations[t * self.amount_of_service_providers:(t + 1) * self.amount_of_service_providers])
-            constraints.append(biggest_tuple_sum - slot_allocation + 0.1)
-        return constraints
+    def allocation_constraints(self, allocations: np.ndarray) -> List[float]:
+        allocations = allocations.reshape(-1, self.amount_of_service_providers)
+        max_slice = np.max(allocations.sum(axis=1))
+        return [max_slice - allocations[t, :].sum() + 0.1 for t in range(self.daily_timeslots)]
 
     def maximize_coalition_payoff(self):
-
         if config.EXTRA_CONSIDERATIONS['per_time_slot_allocation']:
-            # We ignore the per time-slot allocation to get the initial allocations guess
-            # This is just to converge faster
+
             self.per_time_slot_allocation = False
             max_alloc_const = {'type': 'eq', 'fun': self._max_allocation_constraint}
-            b = (0, None)
-            initial_allocations = np.concatenate(
-                [np.ones(self.amount_of_service_providers), [self.amount_of_service_providers]])
+            initial_allocations = np.concatenate([np.ones(self.amount_of_service_providers),
+                                                  [self.amount_of_service_providers]])
+            bounds = [(0, None)] * self.amount_of_service_providers + [(0, self.max_cores_hosted)]
 
+            if self.amount_of_service_providers == 1:
+                sol = minimize(self._objective, initial_allocations,
+                               bounds=bounds,
+                               constraints=max_alloc_const,
+                               method='SLSQP',
+                               options={'ftol': 1e-12, 'eps': 1.5e-9, 'maxiter': 1000, 'disp': False})
 
+            else:
 
-            # Bounds for each service provider
-            bounds = (b,) * self.amount_of_service_providers + ((0, self.max_cores_hosted),)
-            sol = minimize(self._objective, initial_allocations, method='slsqp', bounds=bounds,
-                           constraints=max_alloc_const,
-                           options={'ftol': 1e-6, 'eps': 1.5e-6, 'maxiter': 1000, 'disp': False})
+                sol = minimize(self._objective, initial_allocations,
+                               bounds=bounds,
+                               constraints=max_alloc_const,
+                               method='trust-constr',
+                               options={
+                                   'gtol': self.gtol,
+                                   'xtol': self.xtol,
+                                   'barrier_tol': self.barrier_tol,
+                                   'maxiter': self.maxiter,
+                                   'verbose': 0
+                               })
 
-            initial_allocations = np.asarray(sol.x[:-1])
-            #self.max_alloc = initial_allocations
+            initial_allocations = sol.x[:-1]
 
-            # Now that we got the initial allocation guess we set the per_time_slot allocation
             self.per_time_slot_allocation = True
+            bounds_ts = [(0, None)] * self.amount_of_service_providers
 
-            bounds = [(0, None) for _ in range(self.amount_of_service_providers)]
-            # Best result so far is 'ftol'~ 1e-12,'eps'~ 1e-9, and not calling gradient_of_total_utility
-            # Faster results can be achieved by calling gradient_of_total_utility
-            sol = minimize(self._objective, initial_allocations, method='slsqp',
-                           bounds=bounds,
-                           options={'ftol': 1e-12,
-                                    # Stop criteria, process is stopped when |f_n - f_{n-1}| < ftol, default ~ 1e-6
-                                    'eps': 1.5e-9,
-                                    # Step size used for numerical approximation of the Jacobian, default ~ 1.5e-5
-                                    'maxiter': 5000,  # Max amount of iteration
-                                    'disp': True})
+            # This is not the maximization of the utility
+            # but the maximization of all the time-slots utility combined
+            sol = minimize(self._objective, initial_allocations,
+                           method='SLSQP', bounds=bounds_ts,
+                           options={'ftol': 1e-12, 'eps': 1.5e-9, 'maxiter': 1000, 'disp': False})
 
-            max_alloc_for_player = [max(sol.x[player::self.amount_of_service_providers]) for player in
-                                    range(self.amount_of_service_providers)]
 
-            sol.x = max_alloc_for_player
+            max_alloc_for_player = [max(sol.x[player::self.amount_of_service_providers])
+                                    for player in range(self.amount_of_service_providers)]
+            sol.x = np.array(max_alloc_for_player)
+            # print("max alloc: ", max_alloc_for_player)
             self.total_allocation = sum(max_alloc_for_player)
         else:
-            # Total allocation can't be greater than max_cores_hosted
             max_alloc_const = {'type': 'eq', 'fun': self._max_allocation_constraint}
-
-            b = (0, None)
-
-            initial_allocations = np.concatenate(
-                [np.ones(self.amount_of_service_providers), [self.amount_of_service_providers]])
-            # Bounds for each service provider
-            bounds = (b,) * self.amount_of_service_providers + ((0, self.max_cores_hosted),)
-            sol = minimize(self._objective, initial_allocations, method='slsqp', bounds=bounds,
+            initial_allocations = np.concatenate([np.ones(self.amount_of_service_providers),
+                                                  [self.amount_of_service_providers]])
+            bounds = [(0, None)] * self.amount_of_service_providers + [(0, self.max_cores_hosted)]
+            sol = minimize(self._objective, initial_allocations,
+                           bounds=bounds,
                            constraints=max_alloc_const,
-                           options={'ftol': 1e-9, 'eps': 1e-6, 'maxiter': 1000, 'disp': False})
+                           method='SLSQP',
+                           options={'ftol': 1e-12, 'eps': 1.5e-9, 'maxiter': 1000, 'disp': False})
 
         return sol, self.utilities, self.weighted_by_alloc_cpu_price

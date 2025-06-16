@@ -23,38 +23,44 @@ DATABASE_CONNECTION_CONFIG = {
     'port': 3306,
     'user': 'admin',
     'password': 'admin',
-    'database': 'edge_computing',
+    'database': 'edge_computing_aux',
 }
+
 
 # Set of scripts to keep database structure within the code
 # If one is True, corresponding script is executed and no games are processed
 # Only one at a time can be True, all of them should be False to process games
 DATABASE_MANAGEMENT_CONFIG = {
-    'drop': False,
+    'create': True,
     'truncate': False,
-    'create': False
+    'drop': False
+
 }
 
 # Save the utility and load for each service provider in the database
 # Any combination is possible
 SAVE_FUNCTION = {
-    'utility': False,
-    'load': False
+    'utility': True,
+    'load': True
 }
+
 
 # This defines how the model is going to be computed
 # Only one can be True
 VALUE_FUNCTION_MODE = {
 
-    'additive': True, # Individual contribution
-    'non_additive_deterministic': False,
-    'non_additive_estimation': False
+    # Independent contribution
+    'additive_deterministic': False,
+    # Non-independent contribution
+    'non_additive_estimation': False,
+    'non_additive_deterministic': True,
+
 }
 
-# It shouldn't be used with 'additive': True, but it is possible
+# It shouldn't be used with independent contribution ("estimation" or "additive")  : True, but it is possible
 EXTRA_CONSIDERATIONS = {
     'variable_cpu_price': False,
-    'per_time_slot_allocation': False
+    'per_time_slot_allocation': True
 }
 
 # This is the amount of samples for each service provider to calculate the shapley value
@@ -63,9 +69,11 @@ MONTE_CARLO_VARIABLES = {
     'num_samples': 10
 }
 
-
-# It shouldn't be used with 'additive': True, but it is possible
-EXTRA_FUNCTIONALITIES = {
-    # "'calibrate_params': False,
-    "check_for_cheat": False
+# We use trust-constr as an optimization method for dynamic allocation
+# These parameter are the one being used in the optimization_controller
+TRUST_CONSTR_PARAMETERS = {
+    'gtol': 1e-9,
+    'xtol': 1e-6,
+    'barrier_tol': 1e-6,
+    'maxiter': 1000
 }

@@ -38,32 +38,32 @@ class CheckForErrors:
 
         # Check for utilities and revenues
         if sim.simulation_type == 'additive' or (not sim.variable_cpu_price and not sim.per_time_slot_allocation):
-            if abs(sum(game.grand_coalition.revenues) - sum(game.grand_coalition.utilities)) > 0.001:
+            if abs(sum(game.grand_coalition.deployment_cost) - sum(game.grand_coalition.utilities)) > 0.001:
                 logger.error(
                     "ERROR: game is additive or allocation and cpu price are fixed and the sum of single utilities (for each player) don't match the total revenues")
                 logger.error("sum of utilities is: %s", sum(game.grand_coalition.utilities))
-                logger.error("sum of revenues is: %s", game.grand_coalition.revenues)
+                logger.error("sum of revenues is: %s", game.grand_coalition.deployment_cost)
                 logger.error("difference is: %s",
-                             sum(game.grand_coalition.revenues) - sum(game.grand_coalition.utilities))
+                             sum(game.grand_coalition.deployment_cost) - sum(game.grand_coalition.utilities))
                 return False
 
         else:
-            if sum(game.grand_coalition.utilities) > sum(game.grand_coalition.revenues) + 0.001:
+            if sum(game.grand_coalition.utilities) > sum(game.grand_coalition.deployment_cost) + 0.001:
                 logger.error(
                     "ERROR: game is not additive and allocation or cpu price are are not fixed and the sum of single revenues (for each player) don't match the total revenues")
                 logger.error("sum of net utilities is: %s", sum(game.grand_coalition.utilities))
-                logger.error("sum of revenues is: %s", sum(game.grand_coalition.revenues))
+                logger.error("sum of revenues is: %s", sum(game.grand_coalition.deployment_cost))
                 logger.error("difference is: %s",
-                             sum(game.grand_coalition.revenues) - sum(game.grand_coalition.utilities))
+                             sum(game.grand_coalition.deployment_cost) - sum(game.grand_coalition.utilities))
                 return False
             else:
 
                 logger.debug(
                     "Since value function is not additive and allocation or cpu price are are not fixed, total utilities - total revenues should be a positive number")
-                logger.debug("sum of revenues is: %s", sum(game.grand_coalition.revenues))
+                logger.debug("sum of revenues is: %s", sum(game.grand_coalition.deployment_cost))
                 logger.debug("sum of utilities is: %s", sum(game.grand_coalition.utilities))
                 logger.debug("difference is: %s",
-                             sum(game.grand_coalition.revenues) - sum(game.grand_coalition.utilities))
+                             sum(game.grand_coalition.deployment_cost) - sum(game.grand_coalition.utilities))
 
         logger.debug("Total payment and sum of single payments and revenues are correct!")
         return True

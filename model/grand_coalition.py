@@ -5,11 +5,11 @@ class GrandCoalition:
 
         # Gross utilities
         self.utilities = []
-        # Gross utilities
+        # Net utilities
         self.net_utilities = []
 
-        self.revenues = []
-        self.payments = []
+        self.allocation_payment = []
+        self.fairness_payment = []
         self.allocation = []
         self.shapley_value = []
         self.total_cpu_price = None

@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Edit Configuration Files</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+  <div class="container">
+    <h1>Edit Configuration Files</h1>
+    {% for cat,msg in get_flashed_messages(with_categories=true) %}
+      <div class="flash {{cat}}">{{msg}}</div>
+    {% endfor %}
+
+    <form method="post" class="editor-form">
+      <div class="panel yaml-panel">
+        <h2>YAML (config.yaml)</h2>
+        <textarea name="yaml_content" wrap="off">{{ yaml_content }}</textarea>
+      </div>
+
+      <div class="panel cfg-panel">
+        <h2>Python Config (config.py)</h2>
+        <textarea name="config_content" wrap="off">{{ config_content }}</textarea>
+      </div>
+
+      <button type="submit" class="save-button">Save All</button>
+    </form>
+  </div>
+</body>
+</html>

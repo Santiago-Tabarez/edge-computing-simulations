@@ -1,5 +1,6 @@
 import itertools
 import logging
+import sys
 
 from config import config
 from controller.dao_controller import DAOController
@@ -15,6 +16,76 @@ logger = logging.getLogger(__name__)
 
 
 class GameBuilderController:
+
+    @staticmethod
+    def compute_xi_from_frac(case, fraction, d_prime, rho=None, beta=None):
+
+        if case not in {0, 1, 2, 3}:
+            raise ValueError("Case must be 0, 1, 2, or 3.")
+        if not (0 < fraction < 1):
+            raise ValueError("Fraction must be strictly between 0 and 1.")
+        if d_prime <= 0:
+            raise ValueError("d_prime must be positive.")
+
+        if case == 0:
+            if rho is None:
+                raise ValueError("Parameter 'rho' is required for case 0.")
+            result = d_prime / (rho * (1 - fraction))
+
+        elif case == 1:
+            if beta is None:
+                raise ValueError("Parameter 'beta' is required for case 1.")
+            result = d_prime / (beta * (1 - fraction))
+
+        elif case == 2:
+            result = 1 - fraction
+            if result <= 0:
+                raise ValueError("Computed xi is non‐positive. Check the fraction for case 2.")
+
+        else:  # case == 3
+            result = d_prime / (1 - fraction)
+
+        # This is needed to update the database results, if more precession is needed use Double in the database
+        return float(f"{result:.6g}")
+
+    @staticmethod
+    def compute_frac_from_xi(case, xi, d_prime, rho=None, beta=None):
+        """
+        Inverse of compute_xi_from_frac.
+        Given case ∈ {0,1,2,3}, xi, and d_prime (>0),
+        returns fraction ∈ (0,1) rounded to 6 significant figures
+        to match MySQL FLOAT precision.
+        Requires rho for case 0, beta for case 1.
+        """
+        # validate inputs
+        if case not in {0, 1, 2, 3}:
+            raise ValueError("Case must be 0, 1, 2, or 3.")
+        if xi <= 0:
+            raise ValueError("xi must be positive.")
+        if d_prime <= 0:
+            raise ValueError("d_prime must be positive.")
+
+        # compute raw fraction by case
+        if case == 0:
+            if rho is None:
+                raise ValueError("Parameter 'rho' is required for case 0.")
+            fraction = 1 - (d_prime / (rho * xi))
+        elif case == 1:
+            if beta is None:
+                raise ValueError("Parameter 'beta' is required for case 1.")
+            fraction = 1 - (d_prime / (beta * xi))
+        elif case == 2:
+            fraction = 1 - xi
+        else:  # case == 3
+            fraction = 1 - (d_prime / xi)
+
+        # ensure the result is in (0,1)
+        if not (0 < fraction < 1):
+            raise ValueError(f"Computed fraction {fraction} is out of bounds (0,1).")
+
+        # round to 6 significant figures for MySQL FLOAT compatibility
+        return float(f"{fraction:.6g}")
+
 
     # Auxiliary functions to read the values from .yaml files
 
@@ -50,24 +121,29 @@ class GameBuilderController:
         daily_timeslots_list = self.parse_value_list(game_data['daily_timeslots'])
         years_list = self.parse_value_list(game_data['years'])
 
+        chosen_case = game_data['selected_case']
+        aux_funct_exponents = game_data['cases'][chosen_case]
+
         simulation_type = ''
-        if config.VALUE_FUNCTION_MODE['additive']:
-            simulation_type = 'additive'
+        # if config.VALUE_FUNCTION_MODE['additive_estimation']:
+        #    simulation_type = 'additive_estimation'
+        if config.VALUE_FUNCTION_MODE['additive_deterministic']:
+            simulation_type = 'additive_deterministic'
         elif config.VALUE_FUNCTION_MODE['non_additive_deterministic']:
-            simulation_type = 'deterministic'
+            simulation_type = 'non_additive_deterministic'
         elif config.VALUE_FUNCTION_MODE['non_additive_estimation']:
-            simulation_type = 'estimation'
+            simulation_type = 'non_additive_estimation'
 
         variable_cpu_price = config.EXTRA_CONSIDERATIONS['variable_cpu_price']
         per_time_slot_allocation = config.EXTRA_CONSIDERATIONS['per_time_slot_allocation']
 
         # If per unit cpu price is variable or allocation is variable through time the slots then contributions are not independent
         # We allow it but give the proper warning
-        if variable_cpu_price and config.VALUE_FUNCTION_MODE['additive']:
+        if variable_cpu_price and config.VALUE_FUNCTION_MODE['additive_deterministic']:
             logger.warning(
                 "Waring: simulation type is additive (players contribution is independent) and CPU price is variable")
 
-        if per_time_slot_allocation and config.VALUE_FUNCTION_MODE['additive']:
+        if per_time_slot_allocation and config.VALUE_FUNCTION_MODE['additive_deterministic']:
             logger.warning(
                 "Warning: simulation type is additive (players contribution is independent) and allocation is variable in time slots")
 
@@ -81,16 +157,22 @@ class GameBuilderController:
             hyperparameters = list(zip(a_k, t_k))
             avg_load = self.parse_value_list(sp['avg_load'])
             benefit_factor = self.parse_value_list(sp['benefit_factor'])
-            xi = self.parse_value_list(sp['xi'])
+
+            if 'frac_of_requests' in sp:
+                fac_of_req = self.parse_value_list(sp['frac_of_requests'])
+                xi = [0] * len(fac_of_req)
+            else:
+                xi = self.parse_value_list(sp['xi'])
+                fac_of_req = [0] * len(xi)
+
             sigma = self.parse_value_list(sp['sigma'])
 
             for sp_id in sp['service_provider_name']:
                 amount_of_players += 1
-                sps = ServiceProviderSimulation(sp_id, sigma, avg_load, benefit_factor, xi, hyperparameters)
+
+                sps = ServiceProviderSimulation(sp_id, sigma, avg_load, benefit_factor, xi, fac_of_req, hyperparameters)
                 sim_players.append(sps)
 
-        # TODO remove this if I keep variable CPU price and add min and max for cpu and cpu_price
-        # TODO IF CPU PRICE IS VARIABLE !!
         prices = game_data['prices']
 
         if not variable_cpu_price:
@@ -166,39 +248,13 @@ class GameBuilderController:
                         # benefit_factor and xi will be assigned later since they determine the amount of games but not de amount of load functions
                         sp_aux = ServiceProvider(player_id=saved_service_provider.player_id,
                                                  player_name=service_provider_name, avg_load=avg_load,
-                                                 benefit_factor=None, xi=None, sigma=sigma,
+                                                 benefit_factor=None, xi=None, frac_of_load_at_edge=None, sigma=sigma,
                                                  hyperparameters=hyper_params, load_function=loads,
                                                  load_function_id=load_function_id)
 
-                        # TODO move from here
-                        # sp.get('true_avg_load', 'None')
-                        sp_aux.true_avg_load = sp.get('true_avg_load', None)
-                        if sp_aux.true_avg_load is not None:
-
-                            sp_aux.true_hyperparameters = list(zip(sp['true_a_k'], sp['true_t_k']))
-                            sp_aux.true_benefit_factor = sp['true_benefit_factor']
-                            sp_aux.true_sigma_load = sp['true_sigma']
-                            sp_aux.true_xi = sp['true_xi']
-
-                            loads = generate_loads(daily_tl, sp_aux.true_sigma_load, sp_aux.true_avg_load,
-                                                   sp_aux.true_hyperparameters[0])
-
-                            # Just to visualize it better we create the corresponding chart with hours on x and load value on y
-                            chart = [(i * 24 / daily_tl, loads[i]) for i in range(daily_tl - 1)]
-
-                            sp_aux.true_load_function = loads
-                            sp_aux.true_load_function_id = daoC.save_true_load_function(chart,
-                                                                                        saved_service_provider.player_id,
-                                                                                        avg_load,
-                                                                                        sigma, hyper_params)
 
                         service_providers_load_functions.append(sp_aux)
                         saved_service_provider.load_functions.append([load_function_id, sigma, avg_load, loads])
-
-
-
-
-
 
             # If a players have two or more load functions, then we need to create a different game for each combination of them
             # This code is to create a list of lists, where the inner one is the load function for each player and the external one
@@ -220,80 +276,101 @@ class GameBuilderController:
             # Now that we created and assigned load functions we will create the games and assign them the corresponding function
             for max_cor_h in self.parse_value_list(game_data['max_cores_hosted']):
                 for year in years_list:
-                    for p_val in self.parse_value_list(game_data['p_value']):
-                        for q_val in self.parse_value_list(game_data['q_value']):
-                            # self.parse_value_list(game_data['cpu_price']):
-                            for price in prices:
-                                for sp_list in result_service_providers_list:
 
-                                    sp_utility_functions = []
-                                    for sp in game_data['service_providers']:
-                                        benefit_factors = self.parse_value_list(sp['benefit_factor'])
-                                        xis = self.parse_value_list(sp['xi'])
-                                        # Generate all combinations of benefit_factor and xi for this service provider
-                                        combinations = list(itertools.product(benefit_factors, xis))
-                                        sp_utility_functions.append(combinations)
+                    # self.parse_value_list(game_data['cpu_price']):
+                    for price in prices:
+                        amortized_price = price / (365 * daily_tl * year)
+                        for sp_list in result_service_providers_list:
+                            sp_utility_functions = []
+                            using_fractions = None
+                            for sp in game_data['service_providers']:
+                                benefit_factors = self.parse_value_list(sp['benefit_factor'])
+                                if 'frac_of_requests' in sp:
+                                    if using_fractions == 0:
+                                        logger.error(
+                                            "Set all SPs' diminishing return parameter as the fraction of the total load served "
+                                            "at the edge or by directly defining the value of xi, but not a combination of both")
+                                        sys.exit("Fix this and re-run the simulation")
 
-                                    # Create the cartesian product of combinations across all service providers
-                                    all_sp_utility_functions_combinations = list(itertools.product(*sp_utility_functions))
-                                    for combination in all_sp_utility_functions_combinations:
-                                        # Price is variable
-                                        if isinstance(price, tuple):
+                                    else:
+                                        using_fractions = 1
+                                    fractions = self.parse_value_list(sp['frac_of_requests'])
+                                    combinations = list(itertools.product(benefit_factors, fractions))
+                                    sp_utility_functions.append(combinations)
+                                else:
+                                    if using_fractions == 1:
+                                        logger.error(
+                                            "Set all SPs' diminishing return parameter as the fraction of the total load served "
+                                            "at the edge or by directly defining the value of xi, but not a combination of both")
+                                        sys.exit("Fix this and re-run the simulation")
+                                    else:
+                                        using_fractions = 0
+                                    xis = self.parse_value_list(sp['xi'])
+                                    combinations = list(itertools.product(benefit_factors, xis))
+                                    sp_utility_functions.append(combinations)
+                                # Generate all combinations of benefit_factor and xi for this service provider
 
-                                            game = Game(game_data['simulation_name'], years=year,
-                                                        max_cores_hosted=max_cor_h,
-                                                        min_cores_hosted=price[0],
-                                                        min_cpu_price=price[1],
-                                                        max_cpu_price=price[2],
-                                                        amount_of_players=1,
-                                                        daily_timeslots=daily_tl,
-                                                        p_value=p_val,
-                                                        q_value=q_val)
-                                        # Price is fixed
-                                        else:
-                                            game = Game(game_data['simulation_name'], years=year,
-                                                        max_cores_hosted=max_cor_h,
-                                                        min_cores_hosted=0,
-                                                        min_cpu_price=price,
-                                                        max_cpu_price=price,
-                                                        amount_of_players=1,
-                                                        daily_timeslots=daily_tl,
-                                                        p_value=p_val,
-                                                        q_value=q_val)
 
-                                        # Network owner takes name from the simulation name
-                                        network_owner = NetworkOwner(game_data['simulation_name'])
-                                        game.add_player(network_owner)
-                                        i = 0
-                                        for j, serv_prov in enumerate(sp_list):
-                                            if cloned_sp[j]:
-                                                i -= 1
-                                            util_funct = combination[i]
-                                            i += 1
-                                            # It will create len('service_provider_name') players with the same values but different names
-                                            # This is just to easily add many players with the same values
-                                            # for sp_load_funct in osp:
-                                            service_provider = ServiceProvider(
-                                                player_id=serv_prov.player_id,
-                                                player_name=serv_prov.player_name, avg_load=serv_prov.avg_load,
-                                                benefit_factor=util_funct[0], xi=util_funct[1],
-                                                sigma=serv_prov.sigma_load, hyperparameters=serv_prov.hyperparameters,
-                                                load_function=serv_prov.load_function,
-                                                load_function_id=serv_prov.load_function_id)
 
-                                            if serv_prov.true_load_function:
-                                                service_provider.true_load_function_id = serv_prov.true_load_function_id
-                                                service_provider.true_avg_load = serv_prov.true_avg_load
-                                                service_provider.true_sigma = serv_prov.true_sigma_load
-                                                service_provider.true_hyperparameters = serv_prov.true_hyperparameters
-                                                service_provider.true_load_function = serv_prov.true_load_function
-                                            if serv_prov.true_xi:
-                                                service_provider.true_xi = serv_prov.true_xi
-                                                service_provider.true_benefit_factor = serv_prov.true_benefit_factor
+                            # Create the cartesian product of combinations across all service providers
+                            all_sp_utility_functions_combinations = list(itertools.product(*sp_utility_functions))
+                            for combination in all_sp_utility_functions_combinations:
+                                # Price is variable
+                                if isinstance(price, tuple):
+                                    game = Game(game_data['simulation_name'], years=year,
+                                                max_cores_hosted=max_cor_h,
+                                                min_cores_hosted=price[0],
+                                                min_cpu_price=price[1],
+                                                max_cpu_price=price[2],
+                                                amount_of_players=1,
+                                                daily_timeslots=daily_tl,
+                                                aux_funct_exponents=aux_funct_exponents,
+                                                chosen_case=chosen_case)
+                                # Price is fixed
+                                else:
+                                    game = Game(game_data['simulation_name'], years=year,
+                                                max_cores_hosted=max_cor_h,
+                                                min_cores_hosted=0,
+                                                min_cpu_price=price,
+                                                max_cpu_price=price,
+                                                amount_of_players=1,
+                                                daily_timeslots=daily_tl,
+                                                aux_funct_exponents=aux_funct_exponents,
+                                                chosen_case=chosen_case)
 
-                                            game.amount_of_players += 1
-                                            game.add_player(service_provider)
+                                # Network owner takes name from the simulation name
+                                network_owner = NetworkOwner(game_data['simulation_name'])
+                                game.add_player(network_owner)
+                                i = 0
+                                for j, serv_prov in enumerate(sp_list):
+                                    if cloned_sp[j]:
+                                        i -= 1
+                                    util_funct = combination[i]
+                                    i += 1
+                                    # It will create len('service_provider_name') players with the same values but different names
+                                    # This is just to easily add many players with the same values
+                                    # for sp_load_funct in osp:
+                                    benefit_fac = util_funct[0]
+                                    rho = serv_prov.avg_load * benefit_fac
+                                    if using_fractions:
+                                        frac_val = util_funct[1]
+                                        xi_val = self.compute_xi_from_frac(chosen_case, frac_val, amortized_price, rho=rho, beta=benefit_fac)
+                                    else:
+                                        xi_val = util_funct[1]
+                                        frac_val = self.compute_frac_from_xi(chosen_case, xi_val, amortized_price, rho=rho, beta=benefit_fac)
 
-                                        sim.games.append(game)
+
+                                    service_provider = ServiceProvider(
+                                        player_id=serv_prov.player_id,
+                                        player_name=serv_prov.player_name, avg_load=serv_prov.avg_load,
+                                        benefit_factor=benefit_fac, xi=xi_val, frac_of_load_at_edge=frac_val,
+                                        sigma=serv_prov.sigma_load, hyperparameters=serv_prov.hyperparameters,
+                                        load_function=serv_prov.load_function,
+                                        load_function_id=serv_prov.load_function_id)
+
+                                    game.amount_of_players += 1
+                                    game.add_player(service_provider)
+
+                                sim.games.append(game)
 
         return sim
