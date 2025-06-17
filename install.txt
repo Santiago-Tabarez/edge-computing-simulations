@@ -1,12 +1,19 @@
-# Instalar en VirtualBox ubuntu 22.04 (debería funcionar con otras versiones)
+# Below we provide the steps for:
 
-# Para poder copiar y pegar el resto de los comandos
+# 1: Installing in an empty VM with ubuntu 22.04 (it should work with other versions)
+# 2: Installing using a vagrant file that creates the same VM
+# 3: The configuration of Metabase needed in both cases
+
+
+##### 1: Installation steps for VM #####
+
+# This is just to be able to copy and paste into the VM
 sudo apt update
 sudo apt install build-essential dkms linux-headers-$(uname -r)
 sudo mount /dev/cdrom /mnt
 sudo /mnt/VBoxLinuxAdditions.run
+# turnoff the VM, activate VBox options to copy and paste
 
-# apagar la VM, activar en las opciones de VBox de copiiar y pegar
 
 sudo apt-get update
 
@@ -26,10 +33,20 @@ sudo apt-get install -y \
  openjdk-11-jdk
 
 
-sudo apt-get update
-sudo apt-get install -y curl
+sudo systemctl start mysql
+sudo systemctl enable mysql
 
-# compila e instala si python3.12 no está disponible
+sudo mysql -e "CREATE DATABASE edge_computing;"
+sudo mysql -e "CREATE USER 'admin'@'%' IDENTIFIED BY 'admin';"
+sudo mysql -e "GRANT ALL PRIVILEGES ON edge_computing.* TO 'admin'@'%';"
+sudo mysql -e "FLUSH PRIVILEGES;"
+
+
+curl -L -o ~/metabase.jar https://downloads.metabase.com/v0.44.6/metabase.jar
+nohup java -jar ~/metabase.jar &
+
+
+# Compile and install python 3.12
 
 if ! command -v python3.12 &> /dev/null; then
   cd /tmp
@@ -43,36 +60,57 @@ if ! command -v python3.12 &> /dev/null; then
   rm -rf Python-3.12.1 Python-3.12.1.tgz
 fi
 
+# It will ask for user password
+
 curl -sS https://bootstrap.pypa.io/get-pip.py | sudo python3.12
 
-sudo systemctl start mysql
-
-sudo systemctl enable mysql
-
-sudo mysql -e "CREATE DATABASE edge_computing;"
-sudo mysql -e "CREATE USER 'admin'@'%' IDENTIFIED BY 'admin';"
-sudo mysql -e "GRANT ALL PRIVILEGES ON edge_computing.* TO 'admin'@'%';"
-sudo mysql -e "FLUSH PRIVILEGES;"
-
+# Download code
 sudo apt install git
-# Seleccionar
+# To install in home folder
 cd ~
 git clone https://github.com/Santiago-Tabarez/edge-computing-simulations
 cd edge-computing-simulations
 
-
+# Activate virtual environment
 python3.12 -m venv ~/env
 source ~/env/bin/activate
 
-
+# Download project dependencies
 pip install --upgrade pip
 pip install -r requirements.txt
 
 
-curl -L -o ~/metabase.jar https://downloads.metabase.com/v0.44.6/metabase.jar
-nohup java -jar ~/metabase.jar &
-
-
-# Reemplazar "edge-user" por el usuario
+# Execute the simulator
+# Replace "edge-user" with real username
 export PYTHONPATH=/home/edge-user/edge-computing-simulations
 python3 main/main.py
+
+
+##### 2: Installation steps for Vagrant #####
+
+# Install Vagrant and virtual Box, in a windows or unix terminal run
+
+vagrant up
+
+vagrant ssh
+
+source /home/vagrant/env/bin/activate
+
+cd /home/vagrant/project
+
+python3 main.py
+
+
+
+##### 3: Metabase configuration #####
+
+The Metabase service can be accessed through the web browser by navigating to localhost:3000.
+
+Create user and password, real email is not needed
+
+Name to show: edge_computing
+user: admin
+password: admin
+Host: localhost
+port: 3306
+Database name: edge_computing
