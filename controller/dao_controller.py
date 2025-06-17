@@ -25,6 +25,44 @@ class DAOController:
         truncate = config.DATABASE_MANAGEMENT_CONFIG['truncate']
         create = config.DATABASE_MANAGEMENT_CONFIG['create']
 
+        # Determine script directory relative to this file
+        base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+        scripts_dir = os.path.join(base_dir, 'sql_scripts')
+
+        # No database modification flags set: check for 'simulations' table
+        if sum([drop, truncate, create]) == 0:
+            cursor = self.mydb.cursor()
+            cursor.execute("SHOW TABLES LIKE 'simulations'")
+            if not cursor.fetchone():
+                input("Database tables does not exist, we assume this is the first execution, "
+                      "it will create tables and execution will be halted, run again "
+                      "to execute simulations press enter to continue...")
+                sql_file_path = os.path.join(scripts_dir, 'create.sql')
+                if not os.path.isfile(sql_file_path):
+                    logger.error("SQL script not found: %s", sql_file_path)
+                    sys.exit(1)
+                with open(sql_file_path, 'r') as file:
+                    sql_commands = file.read().strip()
+                cursor = self.mydb.cursor()
+                for command in sql_commands.split(';'):
+                    if command.strip() == '':
+                        continue
+                    try:
+                        cursor.execute(command)
+                    except mysql.connector.Error as err:
+                        logger.error("Failed executing query %s", command)
+                        logger.error("Error is: %s", err)
+                        sys.exit(1)
+                self.mydb.commit()
+                cursor.close()
+                self.mydb.close()
+                print("SQL script:", sql_file_path, "executed successfully")
+                print(
+                    "Remember to set all DATABASE_MANAGEMENT_CONFIG variables to False in file config.py to process the simulations")
+                sys.exit(0)
+            return
+
+
         # No database modification, continue to run simulations
         if sum([drop, truncate, create]) == 0:
             return
@@ -34,9 +72,6 @@ class DAOController:
             logger.error("Only one should be true to modify database and none to run simulations.")
             sys.exit(0)
 
-        # Determine script directory relative to this file
-        base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-        scripts_dir = os.path.join(base_dir, 'sql_scripts')
 
         if truncate:
             input("database tables are going to be truncated, press enter to continue...")
@@ -102,7 +137,7 @@ class DAOController:
                         "This simulation name is already present in the database with different players, change simulation name or delete old simulation from database.")
                 else:
                     logger.warning(
-                        "Simulation name already present in the database, games with same parameter are going to be updated, press Enter to continue")
+                        "Simulation name already present in the database, games with the same parameters are going to be updated, press Enter to continue")
                     input()
 
                 if sim.max_cores_hosted_min > old_sim[2]:

@@ -31,7 +31,7 @@ DATABASE_CONNECTION_CONFIG = {
 # If one is True, corresponding script is executed and no games are processed
 # Only one at a time can be True, all of them should be False to process games
 DATABASE_MANAGEMENT_CONFIG = {
-    'create': True,
+    'create': False,
     'truncate': False,
     'drop': False
 
