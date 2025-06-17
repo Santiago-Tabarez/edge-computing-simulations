@@ -1,7 +1,7 @@
 # Below we provide the steps for:
 
-# 1: Installing in an empty VM with ubuntu 22.04 (it should work with other versions)
-# 2: Installing using a vagrant file that creates the same VM
+# 1: Install in an empty VM with ubuntu 22.04 (it should work with other versions)
+# 2: Install using a vagrant file that creates the same VM
 # 3: The configuration of Metabase needed in both cases
 
 
