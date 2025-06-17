@@ -2,7 +2,7 @@
 
 # Only one value accepted
 # Identifies the set of games defined in this file
-simulation_name : Sim_298
+simulation_name : Sim_1
 
 # All the following properties in this file have 3 different possible assigment configuration:
 # immediate number, ex: price_cpu: 0.5
@@ -96,14 +96,14 @@ service_providers:
     sigma: [0]
     avg_load: [48530]
     a_k:
-      - [25313, -8832, 1757, -2873]
+      - [-25313, 8832, -1757, 2873]
     t_k:
       - [47340, 49080, 44520, 44880]
     #Utility function
-    benefit_factor: [3.5e-06] #[3.805175038051751e-07]
+    benefit_factor: [1.5e-06] #[3.805175038051751e-07]
 
     #xi: [0.08] # the number multiplied by e
-    frac_of_requests : [0.6]
+    frac_of_requests : [0.8]
 
 
 #ORIGINAL CODE VALUES:

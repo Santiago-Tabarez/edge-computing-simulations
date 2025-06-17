@@ -23,6 +23,7 @@ CREATE TABLE `games` (
   `years` FLOAT NOT NULL,
   `daily_timeslots` INT NOT NULL,
   `utility_funct_case` INT DEFAULT NULL,
+  `simulation_type` VARCHAR(45) NOT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `id_UNIQUE` (`id`),
   KEY `fk_sim_id_idx` (`simulation_id`),

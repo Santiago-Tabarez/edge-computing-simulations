@@ -36,7 +36,7 @@ class DeterministicSolverGameController(IGameController):
 
             game.coalitions.append(coal)
 
-    """
+
     @staticmethod
     def players_contribution(game):
 
@@ -75,49 +75,50 @@ class DeterministicSolverGameController(IGameController):
         game.grand_coalition.shapley_value = shapley_values
 
         logger.info("Players payoff (Shapley value) vector is %s:", game.grand_coalition.shapley_value)
+
     """
-
-    # This should be faster than the previous version
-    @staticmethod
-    def players_contribution(game):
-
-        # number of players
-        n = game.amount_of_players
-        # list of players and map to indices
-        players = list(game.players)
-        idx_map = {p: idx for idx, p in enumerate(players)}
-
-        # construct payoff map for all subsets (default 0)
-        payoff_map = {}
-        for r in range(n + 1):
-            for combo in combinations(range(n), r):
-                payoff_map[frozenset(combo)] = 0.0
-
-        # fill actual payoffs from game.coalitions
-        for coalition in game.coalitions:
-            key = frozenset(idx_map[p] for p in coalition.players)
-            payoff_map[key] = coalition.coalition_payoff
-
-        # debug: log payoff_map to verify input
-        # logger.info("Shapley debug - payoff_map: %s", payoff_map)
-
-        # precompute factorials
-        factorials = {i: factorial(i) for i in range(n + 1)}
-        total_fact = factorials[n]
-
-        # compute Shapley values
-        shapley = [0.0] * n
-        for i in range(n):
-            for S, v_S in payoff_map.items():
-                if i not in S:
-                    T = S | {i}
-                    v_T = payoff_map[T]
-                    s = len(S)
-                    weight = (factorials[s] * factorials[n - s - 1]) / total_fact
-                    shapley[i] += weight * (v_T - v_S)
-
-        game.grand_coalition.shapley_value = shapley
-        logger.info("Players payoff (Shapley value) vector is %s", shapley)
+        # This should be faster than the previous version
+        @staticmethod
+        def players_contribution(game):
+    
+            # number of players
+            n = game.amount_of_players
+            # list of players and map to indices
+            players = list(game.players)
+            idx_map = {p: idx for idx, p in enumerate(players)}
+    
+            # construct payoff map for all subsets (default 0)
+            payoff_map = {}
+            for r in range(n + 1):
+                for combo in combinations(range(n), r):
+                    payoff_map[frozenset(combo)] = 0.0
+    
+            # fill actual payoffs from game.coalitions
+            for coalition in game.coalitions:
+                key = frozenset(idx_map[p] for p in coalition.players)
+                payoff_map[key] = coalition.coalition_payoff
+    
+            # debug: log payoff_map to verify input
+            # logger.info("Shapley debug - payoff_map: %s", payoff_map)
+    
+            # precompute factorials
+            factorials = {i: factorial(i) for i in range(n + 1)}
+            total_fact = factorials[n]
+    
+            # compute Shapley values
+            shapley = [0.0] * n
+            for i in range(n):
+                for S, v_S in payoff_map.items():
+                    if i not in S:
+                        T = S | {i}
+                        v_T = payoff_map[T]
+                        s = len(S)
+                        weight = (factorials[s] * factorials[n - s - 1]) / total_fact
+                        shapley[i] += weight * (v_T - v_S)
+    
+            game.grand_coalition.shapley_value = shapley
+            logger.info("Players payoff (Shapley value) vector is %s", shapley)
+    """
 
     # Now that we have the needed allocation for the grand coalition and each player contribution to that coalition (Shapley value)
     # We need to calculate how much each player needs to pay (or receive) from the coalition to make the initial investment

@@ -1,6 +1,6 @@
 class Game:
 
-    def __init__(self, simulation_id, years, max_cores_hosted, min_cores_hosted, min_cpu_price, max_cpu_price, amount_of_players, daily_timeslots, aux_funct_exponents, chosen_case):
+    def __init__(self, simulation_id, years, max_cores_hosted, min_cores_hosted, min_cpu_price, max_cpu_price, amount_of_players, daily_timeslots, aux_funct_exponents, chosen_case, simulation_type):
         self.simulation_id = simulation_id
         self.years = years
         self.max_cores_hosted = max_cores_hosted
@@ -28,6 +28,8 @@ class Game:
         self.grand_coalition = None
         # Not used when calculating values as additive function
         self.coalitions = []
+
+        self.simulation_type = simulation_type
 
     def add_player(self, sp):
         self.players.append(sp)

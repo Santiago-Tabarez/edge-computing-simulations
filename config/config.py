@@ -33,7 +33,7 @@ DATABASE_CONNECTION_CONFIG = {
 DATABASE_MANAGEMENT_CONFIG = {
     'create': False,
     'truncate': False,
-    'drop': False
+    'drop': True
 
 }
 
@@ -60,7 +60,7 @@ VALUE_FUNCTION_MODE = {
 # It shouldn't be used with independent contribution ("estimation" or "additive")  : True, but it is possible
 EXTRA_CONSIDERATIONS = {
     'variable_cpu_price': False,
-    'per_time_slot_allocation': False
+    'per_time_slot_allocation': True
 }
 
 # This is the amount of samples for each service provider to calculate the shapley value
@@ -71,9 +71,8 @@ MONTE_CARLO_VARIABLES = {
 
 # We use trust-constr as an optimization method for dynamic allocation
 # These parameter are the one being used in the optimization_controller
-TRUST_CONSTR_PARAMETERS = {
-    'gtol': 1e-7,
-    'xtol': 1e-5,
-    'barrier_tol': 1e-5,
-    'maxiter': 500
+SLSQP_PARAMETERS = {
+    'ftol': 1e-12,
+    'eps': 1e-9,
+    'maxiter': 1000
 }

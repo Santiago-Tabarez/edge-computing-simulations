@@ -61,10 +61,9 @@ class Optimization:
         self.per_time_slot_allocation = config.EXTRA_CONSIDERATIONS['per_time_slot_allocation']
 
         # TRUST_CONSTR_PARAMETERS parameters
-        self.gtol = config.TRUST_CONSTR_PARAMETERS['gtol']
-        self.xtol = config.TRUST_CONSTR_PARAMETERS['xtol']
-        self.barrier_tol = config.TRUST_CONSTR_PARAMETERS['barrier_tol']
-        self.maxiter = config.TRUST_CONSTR_PARAMETERS['maxiter']
+        self.ftol = config.SLSQP_PARAMETERS['ftol']
+        self.eps = config.SLSQP_PARAMETERS['eps']
+        self.maxiter = config.SLSQP_PARAMETERS['maxiter']
 
         self.allocations = [0] * self.amount_of_service_providers * self.daily_timeslots
         self.total_allocation = 0
@@ -94,7 +93,7 @@ class Optimization:
     def global_allocation_constraint(x: List[float], global_alloc: float) -> float:
         return global_alloc - sum(x)
 
-    def time_slot_utility(self, ts_alloc: np.ndarray, ts: int) -> float:
+    def time_slot_net_utility(self, ts_alloc: np.ndarray, ts: int) -> float:
         utility_ts_sum = 0
         for i in range(self.amount_of_service_providers):
             utility_ts_sum += self.utility_function(ts_alloc[i], ts, i)
@@ -171,29 +170,23 @@ class Optimization:
             utility_sum = 0
             for t in range(self.daily_timeslots):
                 bounds_ts = [(0, None)] * self.amount_of_service_providers
+                # bounds_ts = [(0, None)] * self.amount_of_service_providers + [(0, self.max_cores_hosted)]
                 ts_alloc = np.asarray(allocation)
                 constraint = {'type': 'eq', 'fun': lambda x: self.global_allocation_constraint(x, sum(allocation))}
 
                 result_ts = minimize(
-                    fun=self.time_slot_utility,
+                    fun=self.time_slot_net_utility,
                     x0=ts_alloc,
                     args=(t,),
                     jac=self.time_slot_utility_jac,
-                    hess=self.time_slot_utility_hess,
+                    # hess=self.time_slot_utility_hess,
                     bounds=bounds_ts,
                     constraints=constraint,
-                    method='trust-constr',
-                    options={
-                        'gtol': self.gtol,
-                        'xtol': self.xtol,
-                        'barrier_tol': self.barrier_tol,
-                        'maxiter': self.maxiter,
-                        'verbose': 0
-                    }
+                    method='SLSQP',
+                    options={'ftol': self.ftol, 'eps': self.eps, 'maxiter': self.maxiter, 'disp': False}
                 )
 
                 if not result_ts.success:
-                    print(f"Optimization failed for time slot {t}: {result_ts.message}")
                     continue
                 for i in range(self.amount_of_service_providers):
                     idx = t * self.amount_of_service_providers + i
@@ -239,27 +232,28 @@ class Optimization:
                                                   [self.amount_of_service_providers]])
             bounds = [(0, None)] * self.amount_of_service_providers + [(0, self.max_cores_hosted)]
 
-            if self.amount_of_service_providers == 1:
-                sol = minimize(self._objective, initial_allocations,
-                               bounds=bounds,
-                               constraints=max_alloc_const,
-                               method='SLSQP',
-                               options={'ftol': 1e-12, 'eps': 1.5e-9, 'maxiter': 1000, 'disp': False})
+            # if self.amount_of_service_providers == 1:
 
-            else:
+            sol = minimize(self._objective, initial_allocations,
+                           bounds=bounds,
+                           constraints=max_alloc_const,
+                           method='SLSQP',
+                           options={'ftol': self.ftol, 'eps': self.eps, 'maxiter': self.maxiter, 'disp': False})
 
-                sol = minimize(self._objective, initial_allocations,
-                               bounds=bounds,
-                               constraints=max_alloc_const,
-                               method='trust-constr',
-                               options={
-                                   'gtol': self.gtol,
-                                   'xtol': self.xtol,
-                                   'barrier_tol': self.barrier_tol,
-                                   'maxiter': self.maxiter,
-                                   'verbose': 0
-                               })
-
+            # else:
+            """
+            sol = minimize(self._objective, initial_allocations,
+                           bounds=bounds,
+                           constraints=max_alloc_const,
+                           method='trust-constr',
+                           options={
+                               'gtol': self.gtol,
+                               'xtol': self.xtol,
+                               'barrier_tol': self.barrier_tol,
+                               'maxiter': self.maxiter,
+                               'verbose': 0
+                           })
+            """
             initial_allocations = sol.x[:-1]
 
             self.per_time_slot_allocation = True
@@ -269,8 +263,7 @@ class Optimization:
             # but the maximization of all the time-slots utility combined
             sol = minimize(self._objective, initial_allocations,
                            method='SLSQP', bounds=bounds_ts,
-                           options={'ftol': 1e-12, 'eps': 1.5e-9, 'maxiter': 1000, 'disp': False})
-
+                           options={'ftol': self.ftol, 'eps': self.eps, 'maxiter': self.maxiter, 'disp': False})
 
             max_alloc_for_player = [max(sol.x[player::self.amount_of_service_providers])
                                     for player in range(self.amount_of_service_providers)]
@@ -286,6 +279,6 @@ class Optimization:
                            bounds=bounds,
                            constraints=max_alloc_const,
                            method='SLSQP',
-                           options={'ftol': 1e-12, 'eps': 1.5e-9, 'maxiter': 1000, 'disp': False})
+                           options={'ftol': self.ftol, 'eps': self.eps, 'maxiter': self.maxiter, 'disp': False})
 
         return sol, self.utilities, self.weighted_by_alloc_cpu_price

@@ -325,7 +325,8 @@ class GameBuilderController:
                                                 amount_of_players=1,
                                                 daily_timeslots=daily_tl,
                                                 aux_funct_exponents=aux_funct_exponents,
-                                                chosen_case=chosen_case)
+                                                chosen_case=chosen_case,
+                                                simulation_type = simulation_type)
                                 # Price is fixed
                                 else:
                                     game = Game(game_data['simulation_name'], years=year,
@@ -336,7 +337,8 @@ class GameBuilderController:
                                                 amount_of_players=1,
                                                 daily_timeslots=daily_tl,
                                                 aux_funct_exponents=aux_funct_exponents,
-                                                chosen_case=chosen_case)
+                                                chosen_case=chosen_case,
+                                                simulation_type= simulation_type)
 
                                 # Network owner takes name from the simulation name
                                 network_owner = NetworkOwner(game_data['simulation_name'])

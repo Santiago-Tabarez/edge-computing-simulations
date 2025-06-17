@@ -35,8 +35,8 @@ class DAOController:
             cursor.execute("SHOW TABLES LIKE 'simulations'")
             if not cursor.fetchone():
                 input("Database tables does not exist, we assume this is the first execution, "
-                      "it will create tables and execution will be halted, run again "
-                      "to execute simulations press enter to continue...")
+                      "database tables will be created and execution will be halted, run again main.py"
+                      "to execute simulations, press enter to continue...")
                 sql_file_path = os.path.join(scripts_dir, 'create.sql')
                 if not os.path.isfile(sql_file_path):
                     logger.error("SQL script not found: %s", sql_file_path)
@@ -311,6 +311,7 @@ class DAOController:
                                 AND g.years = %s 
                                 AND g.daily_timeslots = %s
                                 AND g.utility_funct_case = %s
+                                AND g.simulation_type = %s
                                 AND spg.game_id IN (
                                     SELECT spg_inner.game_id
                                     FROM service_providers_games AS spg_inner
@@ -325,7 +326,7 @@ class DAOController:
 
             cpu_price = game.fixed_price if game.fixed_price is not None else game.weighted_per_unit_price
             values = (sim.simulation_id, game.max_cores_hosted, float(cpu_price), game.years, game.daily_timeslots,
-                      game.chosen_case,
+                      game.chosen_case, game.simulation_type,
                       *load_function_ids, *xis, *benefit, len(load_function_ids))
 
             cursor.execute(select_game_id, values)
@@ -390,11 +391,11 @@ class DAOController:
             else:
                 # Save global values of this game
                 insert_game = """
-                INSERT INTO games (simulation_id, max_cores_hosted, cpu_price, years, daily_timeslots, utility_funct_case) 
-                VALUES (%s, %s, %s, %s, %s, %s);
+                INSERT INTO games (simulation_id, max_cores_hosted, cpu_price, years, daily_timeslots, utility_funct_case, simulation_type) 
+                VALUES (%s, %s, %s, %s, %s, %s, %s);
                     """
 
-                values = (sim.simulation_id, game.max_cores_hosted, cpu_price, game.years, game.daily_timeslots, game.chosen_case)
+                values = (sim.simulation_id, game.max_cores_hosted, cpu_price, game.years, game.daily_timeslots, game.chosen_case, game.simulation_type)
 
                 cursor.execute(insert_game, values)
                 self.mydb.commit()
