@@ -36,10 +36,10 @@ class DeterministicAdditiveValueGameController:
             load = np.sum(p.load_function) / game.daily_timeslots
 
             # exponents for [l, b, x, p]
-            l_e = game.load_exponent[0]
-            b_e = game.beta_exponent[0]
-            x_e = game.xi_exponent[0]
-            p_e = game.price_exponent[0]
+            l_e = game.load_exponent
+            b_e = game.beta_exponent
+            x_e = game.xi_exponent
+            p_e = game.price_exponent
 
             xi = p.xi
             beta = p.benefit_factor

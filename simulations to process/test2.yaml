@@ -41,7 +41,7 @@ cases:
 
 # It does not accept multiple values, but the same simulation mane can be used
 # with different selected_cases
-selected_case: 1
+selected_case: 0
 
 
 

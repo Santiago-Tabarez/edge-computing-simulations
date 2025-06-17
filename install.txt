@@ -1,0 +1,74 @@
+# Instalar en VirtualBox ubuntu 22.04 (debería funcionar con otras versiones)
+
+# Para poder copiar y pegar el resto de los comandos
+sudo apt update
+sudo apt install build-essential dkms linux-headers-$(uname -r)
+sudo mount /dev/cdrom /mnt
+sudo /mnt/VBoxLinuxAdditions.run
+
+# apagar la VM, activar en las opciones de VBox de copiiar y pegar
+
+sudo apt-get update
+
+sudo apt-get install -y \
+ software-properties-common \
+ build-essential \
+ zlib1g-dev \
+ libssl-dev \
+ libffi-dev \
+ curl \
+ libbz2-dev \
+ libsqlite3-dev \
+ liblzma-dev \
+ mysql-server \
+ libmysqlclient-dev \
+ pkg-config \
+ openjdk-11-jdk
+
+
+sudo apt-get update
+sudo apt-get install -y curl
+
+# compila e instala si python3.12 no está disponible
+
+if ! command -v python3.12 &> /dev/null; then
+  cd /tmp
+  curl -O https://www.python.org/ftp/python/3.12.1/Python-3.12.1.tgz
+  tar -xf Python-3.12.1.tgz
+  cd Python-3.12.1
+  ./configure --enable-optimizations
+  make -j "$(nproc)"
+  sudo make altinstall
+  cd /tmp
+  rm -rf Python-3.12.1 Python-3.12.1.tgz
+fi
+
+curl -sS https://bootstrap.pypa.io/get-pip.py | sudo python3.12
+
+sudo systemctl start mysql
+
+sudo systemctl enable mysql
+
+sudo mysql -e "CREATE DATABASE edge_computing;"
+sudo mysql -e "CREATE USER 'admin'@'%' IDENTIFIED BY 'admin';"
+sudo mysql -e "GRANT ALL PRIVILEGES ON edge_computing.* TO 'admin'@'%';"
+sudo mysql -e "FLUSH PRIVILEGES;"
+
+sudo apt install git
+# Seleccionar
+cd ~
+git clone https://github.com/Santiago-Tabarez/edge-computing-simulations
+cd edge-computing-simulations
+
+
+python3.12 -m venv ~/env
+source ~/env/bin/activate
+
+
+pip install --upgrade pip
+pip install -r requirements.txt
+
+# Reemplazar "edge-user" por el usuario
+export PYTHONPATH=/home/edge-user/edge-computing-simulations
+
+ python3 main/main.py
