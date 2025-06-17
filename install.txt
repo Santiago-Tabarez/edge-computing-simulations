@@ -98,7 +98,7 @@ source /home/vagrant/env/bin/activate
 
 cd /home/vagrant/project
 
-python3 main.py
+python3 main/main.py
 
 
 
@@ -106,11 +106,12 @@ python3 main.py
 
 The Metabase service can be accessed through the web browser by navigating to localhost:3000.
 
-Create user and password, real email is not needed
-
+Create user and password, real email is not needed,
+Select MySQL database
 Name to show: edge_computing
-user: admin
-password: admin
+
 Host: localhost
 port: 3306
+user: admin
+password: admin
 Database name: edge_computing

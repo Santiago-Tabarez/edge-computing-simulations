@@ -1,5 +1,3 @@
-# Vagrantfile
-
 Vagrant.configure("2") do |config|
   # Select the Vagrant box, Ubuntu 22.04 LTS (Jammy Jellyfish)
   config.vm.box = "ubuntu/jammy64"
@@ -17,7 +15,7 @@ Vagrant.configure("2") do |config|
   # Sync the project directory
   config.vm.synced_folder ".", "/home/vagrant/project", type: "virtualbox"
 
-  # Provision to install Python, MySQL, Java, and Metabase
+  # Provision to install Python, MySQL, Java, and run Metabase jar in background
   config.vm.provision "shell", inline: <<-SHELL
     set -e  # Exit if any command fails
 
@@ -78,32 +76,14 @@ Vagrant.configure("2") do |config|
     pip install --upgrade pip
     pip install -r /home/vagrant/project/requirements.txt
 
-    # Download and setup Metabase
+    # Download Metabase jar
     if [ ! -f /home/vagrant/metabase.jar ]; then
       curl -Lo /home/vagrant/metabase.jar https://downloads.metabase.com/v0.44.6/metabase.jar
     fi
 
-    # Create a systemd service file for Metabase
-    echo "[Unit]
-    Description=Metabase
-    After=syslog.target
-    After=network.target
+    # Run Metabase jar in background
+    nohup java -jar /home/vagrant/metabase.jar > /home/vagrant/metabase.log 2>&1 &
 
-    [Service]
-    User=vagrant
-    ExecStart=/usr/bin/java -jar /home/vagrant/metabase.jar
-    Restart=always
-    StandardOutput=syslog
-    StandardError=syslog
-    SyslogIdentifier=metabase
-
-    [Install]
-    WantedBy=multi-user.target" | sudo tee /etc/systemd/system/metabase.service
-
-    # Reload systemd, enable and start Metabase service
-    sudo systemctl daemon-reload
-    sudo systemctl enable metabase
-    sudo systemctl start metabase
     deactivate
     echo "export PYTHONPATH=/home/vagrant/project" >> /home/vagrant/.bashrc
   SHELL
