@@ -34,8 +34,9 @@ class GenericGameController:
         if config.EXTRA_CONSIDERATIONS['per_time_slot_allocation']:
             gc.utilities = [0] + utilities
             gc.allocation = [0] + list(sol['x'])
-            gc.per_time_slot_allocation = opt.allocations
-            gc.total_time_slot_allocation = opt.total_allocation
+            if not config.VALUE_FUNCTION_MODE['additive_deterministic']:
+                gc.per_time_slot_allocation = opt.allocations
+                gc.total_time_slot_allocation = opt.total_allocation
         else:
             gc.utilities = [0] + utilities
             gc.allocation = [0] + list(sol['x'][:-1])
@@ -67,13 +68,14 @@ class GenericGameController:
         net_utilities = [player.net_utility for player in game.players]
         logger.info("Players allocation vector is: %s:", gc.allocation)
         if config.EXTRA_CONSIDERATIONS['per_time_slot_allocation']:
-            slice_by_t_s = [(opt.allocations[i:i + opt.amount_of_service_providers]) for i in
-                            range(0, len(opt.allocations), opt.amount_of_service_providers)]
-            unused_alloc = [(gc.total_time_slot_allocation - sum(t)) for t in slice_by_t_s]
-            logger.debug("Players allocation for each time-slot is: %s:", slice_by_t_s)
-            logger.info("Max allocation across all time slots is: %s:", gc.total_time_slot_allocation)
+            if not config.VALUE_FUNCTION_MODE['additive_deterministic']:
+                slice_by_t_s = [(opt.allocations[i:i + opt.amount_of_service_providers]) for i in
+                                range(0, len(opt.allocations), opt.amount_of_service_providers)]
+                unused_alloc = [(gc.total_time_slot_allocation - sum(t)) for t in slice_by_t_s]
+                logger.debug("Players allocation for each time-slot is: %s:", slice_by_t_s)
+                logger.info("Max allocation across all time slots is: %s:", gc.total_time_slot_allocation)
             # logger.debug("Unused allocation for each time-slot is: %s:", unused_alloc)
-            logger.debug("Average unused allocation is: %s:", sum(unused_alloc)/game.daily_timeslots)
+                logger.debug("Average unused allocation is: %s:", sum(unused_alloc)/game.daily_timeslots)
 
         logger.info("Players revenues (gross utilities) vector is: %s", gc.utilities)
         logger.info("Players contribution (net utilities) vector is: %s", net_utilities)

@@ -140,12 +140,15 @@ class GameBuilderController:
         # If per unit cpu price is variable or allocation is variable through time the slots then contributions are not independent
         # We allow it but give the proper warning
         if variable_cpu_price and config.VALUE_FUNCTION_MODE['additive_deterministic']:
-            logger.warning(
-                "Waring: simulation type is additive (players contribution is independent) and CPU price is variable")
-
+            logger.error(
+                "Error: simulation type is additive (players contribution is independent) and CPU price is variable"
+                "This combination is incompatible")
+            sys.exit("Modify the configuration file and execute again")
         if per_time_slot_allocation and config.VALUE_FUNCTION_MODE['additive_deterministic']:
-            logger.warning(
-                "Warning: simulation type is additive (players contribution is independent) and allocation is variable in time slots")
+            logger.error(
+                "Error: simulation type is additive (players contribution is independent) and allocation is variable in time slots"
+                "This combination is incompatible")
+            sys.exit("Modify the configuration file and execute again")
 
         amount_of_players = 1
         sim_players = []

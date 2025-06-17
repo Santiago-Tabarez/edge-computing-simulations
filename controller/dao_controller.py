@@ -35,7 +35,7 @@ class DAOController:
             cursor.execute("SHOW TABLES LIKE 'simulations'")
             if not cursor.fetchone():
                 input("Database tables does not exist, we assume this is the first execution, "
-                      "database tables will be created and execution will be halted, run again main.py"
+                      "tables will be created and execution will be halted, run again main.py"
                       "to execute simulations, press enter to continue...")
                 sql_file_path = os.path.join(scripts_dir, 'create.sql')
                 if not os.path.isfile(sql_file_path):

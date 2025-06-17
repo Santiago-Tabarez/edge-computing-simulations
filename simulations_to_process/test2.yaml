@@ -2,7 +2,7 @@
 
 # Only one value accepted
 # Identifies the set of games defined in this file
-simulation_name : Sim_1
+simulation_name : Sim_2
 
 # All the following properties in this file have 3 different possible assigment configuration:
 # immediate number, ex: price_cpu: 0.5

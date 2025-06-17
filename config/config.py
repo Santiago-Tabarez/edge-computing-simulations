@@ -14,7 +14,7 @@ LOGGING_CONFIG = {
     },
     'root': {
         'handlers': ['console'],
-        'level': 'DEBUG',
+        'level': 'INFO',
     },
 }
 
@@ -33,7 +33,7 @@ DATABASE_CONNECTION_CONFIG = {
 DATABASE_MANAGEMENT_CONFIG = {
     'create': False,
     'truncate': False,
-    'drop': True
+    'drop': False
 
 }
 
@@ -60,7 +60,7 @@ VALUE_FUNCTION_MODE = {
 # It shouldn't be used with independent contribution ("estimation" or "additive")  : True, but it is possible
 EXTRA_CONSIDERATIONS = {
     'variable_cpu_price': False,
-    'per_time_slot_allocation': True
+    'per_time_slot_allocation': False
 }
 
 # This is the amount of samples for each service provider to calculate the shapley value
