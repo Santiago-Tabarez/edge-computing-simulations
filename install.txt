@@ -42,8 +42,6 @@ sudo mysql -e "GRANT ALL PRIVILEGES ON edge_computing.* TO 'admin'@'%';"
 sudo mysql -e "FLUSH PRIVILEGES;"
 
 
-curl -L -o ~/metabase.jar https://downloads.metabase.com/v0.44.6/metabase.jar
-nohup java -jar ~/metabase.jar &
 
 
 # Compile and install python 3.12
@@ -59,8 +57,6 @@ if ! command -v python3.12 &> /dev/null; then
   cd /tmp
   rm -rf Python-3.12.1 Python-3.12.1.tgz
 fi
-
-# It will ask for user password
 
 curl -sS https://bootstrap.pypa.io/get-pip.py | sudo python3.12
 
@@ -84,6 +80,9 @@ pip install -r requirements.txt
 # Replace "edge-user" with real username
 export PYTHONPATH=/home/edge-user/edge-computing-simulations
 python3 main/main.py
+
+curl -L -o ~/metabase.jar https://downloads.metabase.com/v0.44.6/metabase.jar
+nohup java -jar ~/metabase.jar &
 
 
 ##### 2: Installation steps for Vagrant #####
