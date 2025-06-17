@@ -68,7 +68,11 @@ source ~/env/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt
 
+
+curl -L -o ~/metabase.jar https://downloads.metabase.com/v0.44.6/metabase.jar
+nohup java -jar ~/metabase.jar &
+
+
 # Reemplazar "edge-user" por el usuario
 export PYTHONPATH=/home/edge-user/edge-computing-simulations
-
- python3 main/main.py
+python3 main/main.py

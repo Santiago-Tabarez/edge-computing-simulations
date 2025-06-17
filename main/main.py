@@ -27,7 +27,11 @@ def main():
     daoC = DAOController()
     daoC.database_config()
 
-    folder_path = '../simulations to process/'
+    # build absolute path to the data folder
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(script_dir)
+    folder_path = os.path.join(project_root, 'simulations_to_process')
+
     yaml_games_data = YAMLDataReader.read_yaml_files(folder_path)
 
     additive_deterministic = config.VALUE_FUNCTION_MODE['additive_deterministic']
