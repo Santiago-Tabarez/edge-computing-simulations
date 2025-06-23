@@ -64,7 +64,7 @@ curl -sS https://bootstrap.pypa.io/get-pip.py | sudo python3.12
 sudo apt install git
 # To install in home folder
 cd ~
-git clone https://github.com/Santiago-Tabarez/edge-computing-simulations
+git clone https://github.com/Santiago-Tabarez/edge-computing-simulations/tree/develop
 cd edge-computing-simulations
 
 # Activate virtual environment
