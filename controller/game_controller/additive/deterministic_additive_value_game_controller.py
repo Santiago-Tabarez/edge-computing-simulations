@@ -64,14 +64,17 @@ class DeterministicAdditiveValueGameController:
             allocations.append(h_star)
             gross_utils.append(total_u)
             total_gross += total_u
-            total_alloc += h_star
+            #total_alloc += h_star
 
         # append sum of all h*
-        allocations.append(total_alloc)
+        #allocations.append(total_alloc)
 
-        sol = Sol(x=allocations, fun=-total_gross)
+        gross = np.array(gross_utils)
+        alloc = np.array(allocations)
+        net_utils = gross - alloc * game.fixed_price
+        # create_grand_coalition(game, utility_sp, net_utility_sp, allocation_ts, effective_price):
         GenericGameController().create_grand_coalition(
-            game, sol, gross_utils, None, None
+            game, gross_utils, net_utils.tolist(), allocations, game.fixed_price
         )
 
     @staticmethod

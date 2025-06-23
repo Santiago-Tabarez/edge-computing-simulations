@@ -302,12 +302,17 @@ class DAOController:
             benefit = [float(player.benefit_factor) for player in game.players[1:]]
             joined_benefit = ', '.join(['%s'] * len(benefit))
 
+            cpu_price = game.fixed_price if game.fixed_price is not None else float(game.weighted_per_unit_price)
+            s = f"{cpu_price:.4g}"  # '0.012'
+            cpu_price = float(s)
+
+
             select_game_id = f"""
                                 SELECT g.id FROM games AS g
                                 JOIN service_providers_games AS spg ON g.id = spg.game_id
                                 WHERE g.simulation_id = %s
                                 AND g.max_cores_hosted = %s 
-                                AND g.cpu_price = %s
+                                AND ABS(g.cpu_price = %s) < 0.0001
                                 AND g.years = %s 
                                 AND g.daily_timeslots = %s
                                 AND g.utility_funct_case = %s
@@ -324,8 +329,8 @@ class DAOController:
                                 GROUP BY g.id
                              """
 
-            cpu_price = game.fixed_price if game.fixed_price is not None else game.weighted_per_unit_price
-            values = (sim.simulation_id, game.max_cores_hosted, float(cpu_price), game.years, game.daily_timeslots,
+
+            values = (sim.simulation_id, game.max_cores_hosted, cpu_price, game.years, game.daily_timeslots,
                       game.chosen_case, game.simulation_type,
                       *load_function_ids, *xis, *benefit, len(load_function_ids))
 

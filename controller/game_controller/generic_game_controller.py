@@ -17,101 +17,87 @@ class GenericGameController:
     def calculate_coal_payoff(game, coal):
         # We skip first player since it is the N.O.
         opt = Optimization(game.min_cpu_price, game.max_cpu_price, game.min_cores_hosted, game.max_cores_hosted,
-                           game.daily_timeslots, game.years * 365, game.load_exponent, game.beta_exponent, game.xi_exponent, game.price_exponent, coal.players[1:])
+                           game.daily_timeslots, game.years * 365, game.load_exponent, game.beta_exponent,
+                           game.xi_exponent, game.price_exponent, coal.players[1:], game.chosen_case)
 
-        sol, utilities, price = opt.maximize_coalition_payoff()
-        coal.allocation = [0] + list(sol['x'][:-1])
-        coal.utilities = [0] + utilities
-        coal.coalition_payoff = -sol['fun']
-        return sol, utilities, price, opt
+        utility_ts, net_utility_ts, allocation_ts, effective_price = opt.maximize_coalition_payoff()
+
+        coal.allocation = [0] + allocation_ts.mean(axis=1).tolist()
+        coal.utilities = [0] + utility_ts.sum(axis=1).tolist()
+        coal.coalition_payoff = [0] + net_utility_ts.sum(axis=1).sum()
+        return utility_ts, net_utility_ts, allocation_ts, effective_price
 
     @staticmethod
-    def create_grand_coalition(game, sol, utilities, cpu_price, opt):
+    def create_grand_coalition(game, utility_sp, net_utility_sp, allocation_ts, effective_price):
+
+        if config.EXTRA_CONSIDERATIONS['variable_cpu_price']:
+            game.weighted_per_unit_price = effective_price
 
         gc = GrandCoalition()
         # Add 0 for NO utilities and allocation
+        if config.VALUE_FUNCTION_MODE['additive_deterministic']:
+            gc.utilities = [0] + utility_sp
+            gc.allocation = [0] + allocation_ts
+            gc.net_utilities = [0] + net_utility_sp
+            gc.total_cpu_price = effective_price
 
-        if config.EXTRA_CONSIDERATIONS['per_time_slot_allocation']:
-            gc.utilities = [0] + utilities
-            gc.allocation = [0] + list(sol['x'])
+        else:
+
+            gc.utilities = [0] + utility_sp.sum(axis=1).tolist()
+            gc.allocation = [0] + allocation_ts.mean(axis=1).tolist()
+            gc.net_utilities = [0] + net_utility_sp.sum(axis=1).tolist()
+            gc.total_cpu_price = effective_price
+            # TODO not additive, or time-slot allocation ?
             if not config.VALUE_FUNCTION_MODE['additive_deterministic']:
-                gc.per_time_slot_allocation = opt.allocations
-                gc.total_time_slot_allocation = opt.total_allocation
-        else:
-            gc.utilities = [0] + utilities
-            gc.allocation = [0] + list(sol['x'][:-1])
-
-        gc.net_utilities = [0] * game.amount_of_players
-        #gc.coalition_payoff = -sol['fun']
-        # Save the total cpu price
-        # If cpu_price is variable
-        if cpu_price:
-            gc.total_cpu_price = cpu_price
-        # If cpu_price is fixed
-        else:
-            gc.total_cpu_price = game.min_cpu_price * sum(gc.allocation)
+                gc.per_time_slot_allocation = allocation_ts
+                gc.total_time_slot_allocation = allocation_ts.mean(axis=1).sum()
 
         game.grand_coalition = gc
 
         for i, player in enumerate(game.players):
             player.allocation = gc.allocation[i]
             player.gross_utility = gc.utilities[i]
-            # If cpu price is variable
-            if cpu_price:
-                player.net_utility = gc.utilities[i] - player.allocation * cpu_price / sum(gc.allocation)
+            player.net_utility = gc.net_utilities[i]
 
-            else:
-                player.net_utility = gc.utilities[i] - player.allocation * game.min_cpu_price
-
-            gc.net_utilities[i] = player.net_utility
-
-        net_utilities = [player.net_utility for player in game.players]
         logger.info("Players allocation vector is: %s:", gc.allocation)
         if config.EXTRA_CONSIDERATIONS['per_time_slot_allocation']:
             if not config.VALUE_FUNCTION_MODE['additive_deterministic']:
-                slice_by_t_s = [(opt.allocations[i:i + opt.amount_of_service_providers]) for i in
-                                range(0, len(opt.allocations), opt.amount_of_service_providers)]
-                unused_alloc = [(gc.total_time_slot_allocation - sum(t)) for t in slice_by_t_s]
-                logger.debug("Players allocation for each time-slot is: %s:", slice_by_t_s)
+                # slice_by_t_s = [(opt.allocations[i:i + opt.amount_of_service_providers]) for i in
+                #                range(0, len(opt.allocations), opt.amount_of_service_providers)]
+                # unused_alloc = [(gc.total_time_slot_allocation - sum(t)) for t in slice_by_t_s]
+                #     logger.debug("Players allocation for each time-slot is: %s:", slice_by_t_s)
                 logger.info("Max allocation across all time slots is: %s:", gc.total_time_slot_allocation)
             # logger.debug("Unused allocation for each time-slot is: %s:", unused_alloc)
-                logger.debug("Average unused allocation is: %s:", sum(unused_alloc)/game.daily_timeslots)
+            #    logger.debug("Average unused allocation is: %s:", sum(unused_alloc)/game.daily_timeslots)
 
         logger.info("Players revenues (gross utilities) vector is: %s", gc.utilities)
-        logger.info("Players contribution (net utilities) vector is: %s", net_utilities)
-        logger.info("Grand coalition total value (net utilities) is %s:", sum(net_utilities))
+        logger.info("Players contribution (net utilities) vector is: %s", gc.net_utilities)
+        logger.info("Grand coalition total value (net utilities) is %s:", sum(gc.net_utilities))
 
     @staticmethod
     # p_cpu is the total CPU price
-    def players_revenue_and_payment(game, deployment_cost):
+    def players_revenue_and_payment(game, effective_cost):
 
-        cpu_cost = deployment_cost / sum(game.grand_coalition.allocation)
-        players_numb = game.amount_of_players
-        shapley_vector = game.grand_coalition.shapley_value
-        revenues_vector = game.grand_coalition.utilities
-        contribution_vector = game.grand_coalition.net_utilities
-
-        game.grand_coalition.allocation_payment = [0] * players_numb
-        game.grand_coalition.fairness_payment = [0] * players_numb
+        game.grand_coalition.allocation_payment = [0] * game.amount_of_players
+        game.grand_coalition.fairness_payment = [0] * game.amount_of_players
         no_payment = 0
 
-        # if config.VALUE_FUNCTION_MODE['additive_deterministic']:
-        for i in range(players_numb):
+        for i in range(game.amount_of_players):
             if i != 0:
-                game.grand_coalition.allocation_payment[i] = cpu_cost * game.grand_coalition.allocation[i]
-                game.grand_coalition.fairness_payment[i] = game.grand_coalition.net_utilities[i]/2
-                no_payment += game.grand_coalition.net_utilities[i]/2
+                game.grand_coalition.allocation_payment[i] = game.grand_coalition.allocation[i] * effective_cost
+                game.grand_coalition.fairness_payment[i] = game.grand_coalition.net_utilities[i] - \
+                                                           game.grand_coalition.shapley_value[i]
+                no_payment -= game.grand_coalition.net_utilities[i] - game.grand_coalition.shapley_value[i]
 
         game.grand_coalition.allocation_payment[0] = 0
-        game.grand_coalition.fairness_payment[0] = -1 * no_payment
+        game.grand_coalition.fairness_payment[0] = no_payment
 
         logger.info("Allocation Payments array: %s", game.grand_coalition.allocation_payment)
         logger.info("Fairness payments array: %s", game.grand_coalition.fairness_payment)
 
-
-
-
         # This give the same result as the code I was provided
+
+
 """
         constraints = [{
             'type': 'eq',

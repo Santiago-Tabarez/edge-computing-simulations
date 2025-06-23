@@ -14,7 +14,7 @@ LOGGING_CONFIG = {
     },
     'root': {
         'handlers': ['console'],
-        'level': 'INFO',
+        'level': 'DEBUG',
     },
 }
 
@@ -40,8 +40,8 @@ DATABASE_MANAGEMENT_CONFIG = {
 # Save the utility and load for each service provider in the database
 # Any combination is possible
 SAVE_FUNCTION = {
-    'utility': False,
-    'load': False
+    'utility': True,
+    'load': True
 }
 
 
@@ -50,17 +50,17 @@ SAVE_FUNCTION = {
 VALUE_FUNCTION_MODE = {
 
     # Independent contribution
-    'additive_deterministic': True,
+    'additive_deterministic': False,
     # Non-independent contribution
     'non_additive_estimation': False,
-    'non_additive_deterministic': False,
+    'non_additive_deterministic': True,
 
 }
 
 # It shouldn't be used with independent contribution ("estimation" or "additive")  : True, but it is possible
 EXTRA_CONSIDERATIONS = {
-    'variable_cpu_price': False,
-    'per_time_slot_allocation': False
+    'variable_cpu_price': True,
+    'per_time_slot_allocation': True
 }
 
 # This is the amount of samples for each service provider to calculate the shapley value
@@ -69,10 +69,9 @@ MONTE_CARLO_VARIABLES = {
     'num_samples': 10
 }
 
-# We use trust-constr as an optimization method for dynamic allocation
-# These parameter are the one being used in the optimization_controller
+# These parameters are the ones being used in the optimization_controller
 SLSQP_PARAMETERS = {
-    'ftol': 1e-12,
-    'eps': 1e-9,
-    'maxiter': 1000
+    'ftol': 1e-9,
+    'eps': 1e-6,
+    'maxiter': 500
 }

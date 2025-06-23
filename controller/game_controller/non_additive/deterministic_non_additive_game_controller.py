@@ -24,10 +24,12 @@ class DeterministicSolverGameController(IGameController):
             # If N.O. is in the coalition and is not the only one
             if no and len(col) > 1:
 
-                sol, utilities, cpu_price, opt = ggc.calculate_coal_payoff(game, coal)
+                # sol, utilities, cpu_price, opt = ggc.calculate_coal_payoff(game, coal)
+                utility_ts, net_utility_ts, allocation_ts, effective_price = ggc.calculate_coal_payoff(game, coal)
                 # If this is the grand coalition
                 if len(game.players) == len(col):
-                    ggc.create_grand_coalition(game, sol, utilities, cpu_price, opt)
+                    ggc.create_grand_coalition(game, utility_ts, net_utility_ts, allocation_ts, effective_price)
+
 
             else:
                 coal.allocation = [0] * len(col)
@@ -40,85 +42,44 @@ class DeterministicSolverGameController(IGameController):
     @staticmethod
     def players_contribution(game):
 
-        # Pre-compute factorials
-        factorials = {i: factorial(i) for i in range(game.amount_of_players + 1)}
-        # Create a mapping from each subset to its immediate supersets that include exactly one additional player
-        subset_to_superset = {}
+        # number of players
+        n = game.amount_of_players
+        # list of players and map to indices
+        players = list(game.players)
+        idx_map = {p: idx for idx, p in enumerate(players)}
+
+        # construct payoff map for all subsets (default 0)
+        payoff_map = {}
+        for r in range(n + 1):
+            for combo in combinations(range(n), r):
+                payoff_map[frozenset(combo)] = 0.0
+
+        # fill actual payoffs from game.coalitions
         for coalition in game.coalitions:
-            coalition_set = frozenset(coalition.players)
-            if coalition_set not in subset_to_superset:
-                subset_to_superset[coalition_set] = []
-            for other_coalition in game.coalitions:
-                other_set = frozenset(other_coalition.players)
-                if coalition_set < other_set and len(other_set) - len(coalition_set) == 1:
-                    subset_to_superset[coalition_set].append((other_set, other_coalition.coalition_payoff))
+            key = frozenset(idx_map[p] for p in coalition.players)
+            payoff_map[key] = coalition.coalition_payoff
 
-        # Calculate Shapley values
-        shapley_values = [0] * game.amount_of_players
+        # debug: log payoff_map to verify input
+        # logger.info("Shapley debug - payoff_map: %s", payoff_map)
 
-        for player_idx, player in enumerate(game.players):
-            for coalition in game.coalitions:
-                if player not in coalition.players:
-                    coalition_set = frozenset(coalition.players)
-                    s_size = len(coalition_set)
-                    if coalition_set in subset_to_superset:
-                        for superset, superset_payoff in subset_to_superset[coalition_set]:
-                            if player in superset:
-                                contribution = superset_payoff - coalition.coalition_payoff
-                                weight = factorials[s_size] * factorials[game.amount_of_players - s_size - 1]
-                                shapley_values[player_idx] += weight * contribution
+        # precompute factorials
+        factorials = {i: factorial(i) for i in range(n + 1)}
+        total_fact = factorials[n]
 
-        # Normalize the Shapley values
-        total_factorial = factorials[game.amount_of_players]
-        shapley_values = [val / total_factorial for val in shapley_values]
+        # compute Shapley values
+        shapley = [0.0] * n
+        for i in range(n):
+            for S, v_S in payoff_map.items():
+                if i not in S:
+                    T = S | {i}
+                    v_T = payoff_map[T]
+                    s = len(S)
+                    weight = (factorials[s] * factorials[n - s - 1]) / total_fact
+                    shapley[i] += weight * (v_T - v_S)
 
-        game.grand_coalition.shapley_value = shapley_values
+        game.grand_coalition.shapley_value =  [x for arr in shapley for x in arr.tolist()]
+        logger.info("Players payoff (Shapley value) vector is %s", game.grand_coalition.shapley_value )
 
-        logger.info("Players payoff (Shapley value) vector is %s:", game.grand_coalition.shapley_value)
-
-    """
-        # This should be faster than the previous version
-        @staticmethod
-        def players_contribution(game):
-    
-            # number of players
-            n = game.amount_of_players
-            # list of players and map to indices
-            players = list(game.players)
-            idx_map = {p: idx for idx, p in enumerate(players)}
-    
-            # construct payoff map for all subsets (default 0)
-            payoff_map = {}
-            for r in range(n + 1):
-                for combo in combinations(range(n), r):
-                    payoff_map[frozenset(combo)] = 0.0
-    
-            # fill actual payoffs from game.coalitions
-            for coalition in game.coalitions:
-                key = frozenset(idx_map[p] for p in coalition.players)
-                payoff_map[key] = coalition.coalition_payoff
-    
-            # debug: log payoff_map to verify input
-            # logger.info("Shapley debug - payoff_map: %s", payoff_map)
-    
-            # precompute factorials
-            factorials = {i: factorial(i) for i in range(n + 1)}
-            total_fact = factorials[n]
-    
-            # compute Shapley values
-            shapley = [0.0] * n
-            for i in range(n):
-                for S, v_S in payoff_map.items():
-                    if i not in S:
-                        T = S | {i}
-                        v_T = payoff_map[T]
-                        s = len(S)
-                        weight = (factorials[s] * factorials[n - s - 1]) / total_fact
-                        shapley[i] += weight * (v_T - v_S)
-    
-            game.grand_coalition.shapley_value = shapley
-            logger.info("Players payoff (Shapley value) vector is %s", shapley)
-    """
 
     # Now that we have the needed allocation for the grand coalition and each player contribution to that coalition (Shapley value)
     # We need to calculate how much each player needs to pay (or receive) from the coalition to make the initial investment

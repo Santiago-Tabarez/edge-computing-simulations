@@ -282,7 +282,10 @@ class GameBuilderController:
 
                     # self.parse_value_list(game_data['cpu_price']):
                     for price in prices:
-                        amortized_price = price / (365 * daily_tl * year)
+                        if variable_cpu_price:
+                            amortized_price = price[2] / (365 * daily_tl * year)
+                        else:
+                            amortized_price = price / (365 * daily_tl * year)
                         for sp_list in result_service_providers_list:
                             sp_utility_functions = []
                             using_fractions = None

@@ -7,10 +7,9 @@ class CPUCost:
                 (allocation - min_cores_hosted) / (max_cores_hosted - min_cores_hosted)) * (
                                  max_cpu_price - min_cpu_price)
 
-        return price_per_unit * allocation
+        return price_per_unit
 
     # Will return the total cpu cost for a game
-    # Grand coalition should be created before calling this function
     @staticmethod
     def get_total_cpu_cost(game):
 
@@ -23,3 +22,5 @@ class CPUCost:
                                                                 game.min_cores_hosted,
                                                                 game.max_cores_hosted, total_allocation)
         return p_cpu
+
+

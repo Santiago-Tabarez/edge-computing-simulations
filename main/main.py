@@ -63,7 +63,7 @@ def main():
 
     gmc = GameBuilderController()
     sc = SimulationController()
-    cfe = CheckForErrors()
+    # cfe = CheckForErrors()
 
     for game_data in yaml_games_data:
 

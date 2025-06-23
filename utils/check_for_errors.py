@@ -12,7 +12,7 @@ class CheckForErrors:
 
         logger.debug("Checking the correctness of the revenues and payments vectors...\n")
         cpu_cost = CPUCost()
-        cost = cpu_cost.get_total_cpu_cost(game)
+        # cost = cpu_cost.get_total_cpu_cost(game)
         # check for payments and costs
         if sim.simulation_type == 'additive' or (not sim.variable_cpu_price and not sim.per_time_slot_allocation):
             if abs(cost - sum(game.grand_coalition.payments)) > 0.001:

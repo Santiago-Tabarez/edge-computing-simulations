@@ -2,7 +2,6 @@ import random
 import logging.config
 
 from config import config
-from controller.game_controller.additive.deterministic_additive_value_game_controller import DeterministicAdditiveValueGameController
 from controller.game_controller.generic_game_controller import GenericGameController
 from controller.i_game_controller import IGameController
 from model.coalition import Coalition
@@ -17,8 +16,11 @@ class EstimationSolverGameController(IGameController):
     def calculate_coal_payoff(game):
 
         # Only calculate the grand coalition
-        additive_values_game_controller = DeterministicAdditiveValueGameController()
-        additive_values_game_controller.calculate_coal_payoff(game)
+        game_controller = GenericGameController()
+        col = game.players
+        coal = Coalition(col)
+        utility_ts, net_utility_ts, allocation_ts, effective_price = game_controller.calculate_coal_payoff(game, coal)
+        game_controller.create_grand_coalition(game, utility_ts, net_utility_ts, allocation_ts, effective_price)
 
     # Approximating the Shapley value of players by using Monte Carlo methods
     @staticmethod
@@ -57,10 +59,10 @@ class EstimationSolverGameController(IGameController):
                 if len(coalition) < 2:
                     return 0
                 else:
-                    sol, _, price, _ = ggc.calculate_coal_payoff(g, Coalition(coalition))
-                    ret = -sol['fun']
-                    coalition_cache[coalition_key] = ret
-                    return ret
+                    utility_ts, net_utility_ts, allocation_ts, effective_price = ggc.calculate_coal_payoff(g, Coalition(coalition))
+                    value = net_utility_ts.sum(axis=1).sum()
+                    coalition_cache[coalition_key] = value
+                    return value
 
         for player_idx, player in enumerate(game.players):
             # Skip the N.O. and calculate it as the sum of other players, this gives consistency and precision
