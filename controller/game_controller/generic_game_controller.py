@@ -47,7 +47,7 @@ class GenericGameController:
             gc.allocation = [0] + allocation_ts.mean(axis=1).tolist()
             gc.net_utilities = [0] + net_utility_sp.sum(axis=1).tolist()
             gc.total_cpu_price = effective_price
-            # TODO not additive, or time-slot allocation ?
+
             if not config.VALUE_FUNCTION_MODE['additive_deterministic']:
                 gc.per_time_slot_allocation = allocation_ts
                 gc.total_time_slot_allocation = allocation_ts.mean(axis=1).sum()
